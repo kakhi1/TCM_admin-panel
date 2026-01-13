@@ -1,0 +1,5 @@
+django
+gunicorn            # The production web server
+psycopg2-binary     # PostgreSQL adapter
+dj-database-url     # To parse the database URL provided by Seenode
+whitenoise          # To serve Admin Panel CSS/Static files
