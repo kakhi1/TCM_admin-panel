@@ -75,7 +75,8 @@ class AnalysisAdmin(admin.ModelAdmin):
     # Helper features
     search_fields = ('blood_test', 'blood_test_full', 'panel')
     list_filter = ('panel', 'vital_marker', 'severity')
-    list_per_page = 50
+    list_per_page = 20
+    show_full_result_count = False
 
 
 @admin.register(Pattern)
