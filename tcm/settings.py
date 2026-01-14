@@ -16,6 +16,12 @@ SECRET_KEY = os.getenv(
 
 # 1. Update ALLOWED_HOSTS to accept the Seenode URL
 # This allows all hosts if the env var isn't set (dev), or specific ones in prod
+CSRF_TRUSTED_ORIGINS = [
+    'https://web-sfrrulttcwj0.up-de-fra1-k8s-1.apps.run-on-seenode.com',
+]
+
+# Required because you are behind Seenode's load balancer
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
 # 2. Update DEBUG
