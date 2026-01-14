@@ -11,19 +11,14 @@ from .models import (
 @admin.register(Analysis)
 class AnalysisAdmin(admin.ModelAdmin):
     # 1. TABLE VIEW (The List) - Shows all 24 columns
-    # list_display = (
-    #     'blood_test', 'panel', 'blood_test_full', 'blood_test_acronym',
-    #     'units', 'units_interchangeable', 'ideal_low', 'ideal_high',
-    #     'absence_low', 'absence_high', 'conv_diag_low', 'conv_diag_high',
-    #     'func_diag_low', 'func_diag_high', 'tcm_diag_low', 'tcm_diag_high',
-    #     'organs_conv_func', 'organs_tcm', 'possible_assoc_pathogens',
-    #     'severity', 'pathogens_low', 'pathogens_high', 'vital_marker',
-    #     'func_panel_1', 'func_panel_2', 'func_panel_3'
-    # )
     list_display = (
         'blood_test', 'panel', 'blood_test_full', 'blood_test_acronym',
         'units', 'units_interchangeable', 'ideal_low', 'ideal_high',
-        'absence_low', 'absence_high',
+        'absence_low', 'absence_high', 'conv_diag_low', 'conv_diag_high',
+        'func_diag_low', 'func_diag_high', 'tcm_diag_low', 'tcm_diag_high',
+        'organs_conv_func', 'organs_tcm', 'possible_assoc_pathogens',
+        'severity', 'pathogens_low', 'pathogens_high', 'vital_marker',
+        'func_panel_1', 'func_panel_2', 'func_panel_3'
     )
 
     # 2. ADD / EDIT VIEW (The Form) - Organized into logical groups
@@ -80,8 +75,7 @@ class AnalysisAdmin(admin.ModelAdmin):
     # Helper features
     search_fields = ('blood_test', 'blood_test_full', 'panel')
     list_filter = ('panel', 'vital_marker', 'severity')
-    list_per_page = 10
-    show_full_result_count = False
+    list_per_page = 50
 
 
 @admin.register(Pattern)

@@ -1,4 +1,4 @@
-django
+django<6.0
 gunicorn            # The production web server
 psycopg2-binary     # PostgreSQL adapter
 dj-database-url     # To parse the database URL provided by Seenode
