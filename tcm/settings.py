@@ -91,6 +91,25 @@ WSGI_APPLICATION = 'tcm.wsgi.application'
 #         'PORT': os.getenv('DB_PORT'),
 #     }
 # }
+# DATABASES = {
+#     'default': dj_database_url.config(
+#         default=f"postgres://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}",
+#         conn_max_age=600,
+#         ssl_require=True
+#     )
+# }
+# # # Fallback for local development if the long URL above fails or isn't set:
+# if 'DATABASE_URL' not in os.environ and DEBUG:
+#     DATABASES['default'] = {
+#         {
+#             'ENGINE': 'django.db.backends.postgresql',
+#             'NAME': os.getenv('DB_NAME'),
+#             'USER': os.getenv('DB_USER'),
+#             'PASSWORD': os.getenv('DB_PASSWORD'),
+#             'HOST': os.getenv('DB_HOST'),
+#             'PORT': os.getenv('DB_PORT'),
+#         }
+#     }
 DATABASES = {
     'default': dj_database_url.config(
         default=f"postgres://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}",
@@ -98,19 +117,17 @@ DATABASES = {
         ssl_require=True
     )
 }
-# # Fallback for local development if the long URL above fails or isn't set:
-if 'DATABASE_URL' not in os.environ and DEBUG:
-    DATABASES['default'] = {
-        {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME'),
-            'USER': os.getenv('DB_USER'),
-            'PASSWORD': os.getenv('DB_PASSWORD'),
-            'HOST': os.getenv('DB_HOST'),
-            'PORT': os.getenv('DB_PORT'),
-        }
-    }
 
+# Fallback for local development
+if 'DATABASE_URL' not in os.environ and DEBUG:
+    DATABASES['default'] = {        # <--- Only ONE opening brace here
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+    }
 #
 # 7. Password Validation
 AUTH_PASSWORD_VALIDATORS = [
