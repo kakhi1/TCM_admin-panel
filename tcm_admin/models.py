@@ -1,8 +1,7 @@
 from django.db import models
-
-
-from django.db import models
 import uuid
+
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class Analysis(models.Model):
@@ -35,6 +34,8 @@ class Analysis(models.Model):
                                      verbose_name="Conventional Med Diagnosis (Low)", blank=True, null=True)
     conv_diag_high = models.TextField(db_column='Conventional Medicine Diagnosis - High',
                                       verbose_name="Conventional Med Diagnosis (High)", blank=True, null=True)
+
+    # --- LOGIC CONNECTION FIELDS (Mapped via Admin Form) ---
     func_diag_low = models.TextField(db_column='Functional Medicine Diagnosis - Low',
                                      verbose_name="Functional Med Diagnosis (Low)", blank=True, null=True)
     func_diag_high = models.TextField(db_column='Functional Medicine Diagnosis - High',
@@ -43,6 +44,7 @@ class Analysis(models.Model):
         db_column='TCM Diagnosis - Low', verbose_name="TCM Diagnosis (Low)", blank=True, null=True)
     tcm_diag_high = models.TextField(
         db_column='TCM Diagnosis - High', verbose_name="TCM Diagnosis (High)", blank=True, null=True)
+    # -----------------------------------------------------
 
     organs_conv_func = models.TextField(
         db_column='Governing Organs (Conventional & Functional)', verbose_name="Organs (Conv & Func)", blank=True, null=True)
@@ -51,16 +53,38 @@ class Analysis(models.Model):
 
     possible_assoc_pathogens = models.TextField(
         db_column='Possible associated pathogens', verbose_name="Possible Assoc Pathogens", blank=True, null=True)
+
+    # 2. Severity: Custom "Select" text
     severity = models.IntegerField(
-        db_column='Deviation Severity (1-5)', verbose_name="Severity (1-5)", blank=True, null=True)
+        db_column='Deviation Severity (1-5)',
+        verbose_name="Severity (1-5)",
+        blank=True,
+        null=True,
+        # We add a custom empty label here
+        choices=[(None, 'Select Severity Score')] + [(i, str(i))
+                                                     for i in range(1, 6)],
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
+    # severity = models.IntegerField(
+    #     db_column='Deviation Severity (1-5)', verbose_name="Severity (1-5)", blank=True, null=True)
 
     pathogens_low = models.TextField(db_column='Possible Pathogens (Low Result)',
                                      verbose_name="Pathogens (Low Result)", blank=True, null=True)
     pathogens_high = models.TextField(db_column='Possible Pathogens (High Result)',
                                       verbose_name="Pathogens (High Result)", blank=True, null=True)
 
+# 1. Vital Marker: Strictly Yes/No, Default No
     vital_marker = models.CharField(
-        max_length=100, db_column='Vital Marker', verbose_name="Vital Marker", blank=True, null=True)
+        max_length=3,
+        db_column='Vital Marker',
+        verbose_name="Vital Marker",
+        choices=[('No', 'No'), ('Yes', 'Yes')],
+        default='No',
+        blank=False,  # Changed to False to ensure a value is always picked
+        null=False   # Removed Null to favor the default 'No'
+    )
+
+    # ----------------------------------
     func_panel_1 = models.CharField(max_length=255, db_column='Functional Panel 1',
                                     verbose_name="Functional Panel 1", blank=True, null=True)
     func_panel_2 = models.CharField(max_length=255, db_column='Functional Panel 2',
@@ -69,7 +93,7 @@ class Analysis(models.Model):
                                     verbose_name="Functional Panel 3", blank=True, null=True)
 
     class Meta:
-        managed = False
+        managed = True  # <--- CHANGED: Allows you to add/edit rows
         db_table = 'analysis'
         verbose_name = "Blood Marker"
 
@@ -275,19 +299,86 @@ class WBCGlossary(models.Model):
 class WBCMatrix(models.Model):
     id = models.BigAutoField(primary_key=True)
 
-    # Blood Marker Levels (Usually High/Low/Normal strings)
-    wbc = models.CharField(max_length=50, db_column='WBC',
-                           verbose_name="WBC", blank=True, null=True)
+    # --- CHOICES DEFINITIONS (With Custom "Select" Placeholders) ---
+
+    LEVEL_CHOICES = [
+        (None, 'Select Level'),  # <--- Replaces "--------"
+        ('Low', 'Low'),
+        ('High', 'High'),
+        ('Normal', 'Normal'),
+        ('Below Optimal', 'Below Optimal'),
+        ('Above Optimal', 'Above Optimal'),
+    ]
+
+    RISK_LEVEL_CHOICES = [
+        (None, 'Select Risk Level'),  # <--- Replaces "--------"
+        ('Very High', 'Very High'),
+        ('High', 'High'),
+        ('Moderate–High', 'Moderate–High'),
+        ('Moderate', 'Moderate'),
+        ('Low', 'Low'),
+    ]
+
+    CONFIDENCE_CHOICES = [
+        (None, 'Select Confidence'),  # <--- Replaces "--------"
+        ('High', 'High'),
+        ('Moderate–High', 'Moderate–High'),
+        ('Moderate', 'Moderate'),
+        ('Low', 'Low'),
+        ('Conditional', 'Conditional'),
+    ]
+
+    # --- FIELDS ---
+
+    # Blood Marker Levels
+    wbc = models.CharField(
+        max_length=50,
+        db_column='WBC',
+        verbose_name="WBC",
+        choices=LEVEL_CHOICES,
+        blank=True,
+        null=True
+    )
     neutrophils = models.CharField(
-        max_length=50, db_column='Neutrophils', verbose_name="Neutrophils")
+        max_length=50,
+        db_column='Neutrophils',
+        verbose_name="Neutrophils",
+        choices=LEVEL_CHOICES,
+        blank=True,
+        null=True
+    )
     lymphocytes = models.CharField(
-        max_length=50, db_column='Lymphocytes', verbose_name="Lymphocytes", blank=True, null=True)
+        max_length=50,
+        db_column='Lymphocytes',
+        verbose_name="Lymphocytes",
+        choices=LEVEL_CHOICES,
+        blank=True,
+        null=True
+    )
     monocytes = models.CharField(
-        max_length=50, db_column='Monocytes', verbose_name="Monocytes", blank=True, null=True)
+        max_length=50,
+        db_column='Monocytes',
+        verbose_name="Monocytes",
+        choices=LEVEL_CHOICES,
+        blank=True,
+        null=True
+    )
     eosinophils = models.CharField(
-        max_length=50, db_column='Eosinophils', verbose_name="Eosinophils", blank=True, null=True)
+        max_length=50,
+        db_column='Eosinophils',
+        verbose_name="Eosinophils",
+        choices=LEVEL_CHOICES,
+        blank=True,
+        null=True
+    )
     basophils = models.CharField(
-        max_length=50, db_column='Basophils', verbose_name="Basophils", blank=True, null=True)
+        max_length=50,
+        db_column='Basophils',
+        verbose_name="Basophils",
+        choices=LEVEL_CHOICES,
+        blank=True,
+        null=True
+    )
 
     # Interpretations & Levels
     primary_int = models.TextField(
@@ -304,14 +395,31 @@ class WBCMatrix(models.Model):
     # Analysis Details
     other_considerations = models.TextField(
         db_column='Other Considerations', verbose_name="Other Considerations", blank=True, null=True)
+
     risk_score = models.IntegerField(
         db_column='Risk Score', verbose_name="Risk Score", blank=True, null=True)
+
     risk_level = models.CharField(
-        max_length=100, db_column='Risk Level', verbose_name="Risk Level", blank=True, null=True)
+        max_length=100,
+        db_column='Risk Level',
+        verbose_name="Risk Level",
+        choices=RISK_LEVEL_CHOICES,  # <--- Added Selector
+        blank=True,
+        null=True
+    )
+
     risk_definition = models.TextField(
         db_column='Risk Definition', verbose_name="Risk Definition", blank=True, null=True)
+
     confidence = models.CharField(
-        max_length=50, db_column='Confidence', verbose_name="Confidence", blank=True, null=True)
+        max_length=50,
+        db_column='Confidence',
+        verbose_name="Confidence",
+        choices=CONFIDENCE_CHOICES,  # <--- Added Selector
+        blank=True,
+        null=True
+    )
+
     rationale = models.TextField(
         db_column='Rationale', verbose_name="Rationale", blank=True, null=True)
     clinical_guidance = models.TextField(
@@ -322,10 +430,9 @@ class WBCMatrix(models.Model):
         db_table = 'wbc_matrix'
         verbose_name = "WBC Matrix"
         verbose_name_plural = "WBC Matrix"
-    # ADD THIS:
 
     def __str__(self):
-        return self.wbc
+        return self.wbc or "WBC Matrix Entry"
 
 
 class MedicationList(models.Model):
@@ -398,24 +505,44 @@ class MedicationMapping(models.Model):
         blank=True,
         null=True
     )
-    magnitude_low = models.IntegerField(
-        db_column='Magnitude for ↓ types (1–3)',
-        verbose_name="Magnitude for ↓ types (1–3)",
-        blank=True,
-        null=True
-    )
+    # magnitude_low = models.IntegerField(
+    #     db_column='Magnitude for ↓ types (1–3)',
+    #     verbose_name="Magnitude for ↓ types (1–3)",
+    #     blank=True,
+    #     null=True
+    # )
+
     med_types_high = models.TextField(
         db_column='↑ Medication types (D)',
         verbose_name="↑ Medication types (D)",
         blank=True,
         null=True
     )
-    magnitude_high = models.IntegerField(
-        db_column='Magnitude for ↑ types (1–3)',
+
+# 1. Add db_column to map 'magnitude_low' to the actual DB column 'Magnitude for ↓ types (1–3)'
+    magnitude_low = models.CharField(
+        max_length=50,
+        db_column='Magnitude for ↓ types (1–3)',  # <--- CRITICAL RESTORATION
+        verbose_name="Magnitude for ↓ types (1–3)",
+        blank=True,
+        null=True
+    )
+
+    # 2. Add db_column to map 'magnitude_high' to the actual DB column 'Magnitude for ↑ types (1–3)'
+    magnitude_high = models.CharField(
+        max_length=50,
+        db_column='Magnitude for ↑ types (1–3)',  # <--- CRITICAL RESTORATION
         verbose_name="Magnitude for ↑ types (1–3)",
         blank=True,
         null=True
     )
+
+    # magnitude_high = models.IntegerField(
+    #     db_column='Magnitude for ↑ types (1–3)',
+    #     verbose_name="Magnitude for ↑ types (1–3)",
+    #     blank=True,
+    #     null=True
+    # )
     narrative_low = models.TextField(
         db_column='Narrative – how ↓ meds lower/mask (E)',
         verbose_name="Narrative – how ↓ meds lower/mask (E)",
@@ -531,25 +658,29 @@ class SupplementMapping(models.Model):
         blank=True, null=True
     )
 
-    # Low Types & Magnitude
+# --- Low Types & Magnitude ---
     supp_types_low = models.TextField(
         db_column='↓ Supplement types',
         verbose_name="↓ Supplement types",
         blank=True, null=True
     )
-    magnitude_low = models.IntegerField(
+    # CHANGED: IntegerField -> CharField to support "1; 2; 3" string format
+    magnitude_low = models.CharField(
+        max_length=50,
         db_column='Magnitude for ↓ types (1–3)',
         verbose_name="Magnitude for ↓ types (1–3)",
         blank=True, null=True
     )
 
-    # High Types & Magnitude
+    # --- High Types & Magnitude ---
     supp_types_high = models.TextField(
         db_column='↑ Supplement types',
         verbose_name="↑ Supplement types",
         blank=True, null=True
     )
-    magnitude_high = models.IntegerField(
+    # CHANGED: IntegerField -> CharField to support "1; 2; 3" string format
+    magnitude_high = models.CharField(
+        max_length=50,
         db_column='Magnitude for ↑ types (1–3)',
         verbose_name="Magnitude for ↑ types (1–3)",
         blank=True, null=True

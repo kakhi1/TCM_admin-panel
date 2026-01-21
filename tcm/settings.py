@@ -142,7 +142,19 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
+JAZZMIN_SETTINGS = {
+    # ... your existing Jazzmin settings ...
 
+    # Add custom CSS
+    "custom_css": "admin/css/jazzmin_table_scroll.css",
+
+    # Add custom JS
+    "custom_js": "admin/js/jazzmin_table_scroll.js",
+
+    # OR if you already have custom_css/custom_js, combine them:
+    # "custom_css": ["admin/css/your_existing.css", "admin/css/jazzmin_table_scroll.css"],
+    # "custom_js": ["admin/js/your_existing.js", "admin/js/jazzmin_table_scroll.js"],
+}
 # 9. Static files (CSS, JavaScript, Images)
 # This is required for the Admin panel to look correct
 STATIC_URL = 'static/'
@@ -153,3 +165,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# --- ADD THIS BLOCK ---
+# This tells Django: "Look for static files in the 'static' folder at the project root"
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+# ----------------------

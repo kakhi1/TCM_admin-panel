@@ -1,0 +1,232 @@
+/* ==========================================================================
+   1. MAIN INPUT CONTAINER (The "Field")
+   ========================================================================== */
+.select2-container--default .select2-selection--multiple {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  min-height: 44px !important; /* Standard height */
+  height: auto !important; /* Allow it to grow */
+  padding: 4px !important;
+  transition: all 0.2s ease;
+
+  /* FLEXBOX CONTAINER SETTINGS */
+  display: flex !important;
+  flex-wrap: wrap !important; /* Critical: Allows multiple lines */
+  align-items: center !important; /* Centers items vertically */
+}
+
+/* The internal list that holds chips + input */
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__rendered {
+  display: flex !important;
+  flex-wrap: wrap !important; /* Ensure items wrap inside the list */
+  align-items: center !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  list-style: none !important;
+}
+
+/* Hover & Focus Effects */
+.select2-container--default .select2-selection--multiple:hover {
+  border-color: #417690 !important;
+}
+.select2-container--default.select2-container--focus
+  .select2-selection--multiple {
+  border: 2px solid #417690 !important;
+  box-shadow: 0 0 0 3px rgba(65, 118, 144, 0.1);
+}
+
+/* ==========================================================================
+   2. THE TAGS ("Chips") - X on Right, Variable Width
+   ========================================================================== */
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice {
+  /* 1. LAYOUT */
+  display: inline-flex !important;
+  flex-direction: row-reverse !important; /* Swaps Text and X */
+  align-items: center !important;
+  justify-content: space-between !important;
+
+  /* 2. SIZING */
+  width: auto !important; /* Shrink to fit text */
+  max-width: 100%;
+  height: 30px !important; /* Fixed height for alignment */
+  margin: 3px !important; /* Gap between tags */
+  padding: 0 10px !important;
+
+  /* 3. VISUALS */
+  background-color: #e0f2fe !important;
+  border: 1px solid #bae6fd !important;
+  border-radius: 15px !important;
+  color: #0c4a6e !important;
+  font-size: 14px !important;
+  font-weight: 600;
+  box-sizing: border-box !important;
+}
+
+/* The "X" Button */
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice__remove {
+  border: none !important;
+  margin-left: 8px !important; /* Space between Text and X */
+  margin-right: 0 !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  color: #0c4a6e !important;
+  cursor: pointer;
+  background: transparent !important;
+
+  /* Center the icon */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  position: static !important;
+}
+
+.select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice__remove:hover {
+  color: #dc2626 !important;
+}
+
+/* ==========================================================================
+   3. CLEAN INPUT & SEARCH - Fixed Alignment
+   ========================================================================== */
+/* The container for the input field */
+.select2-container--default .select2-search--inline {
+  flex: 1 1 auto !important; /* Takes remaining space */
+  min-width: 120px !important; /* Ensures it never disappears */
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 3px !important; /* Matches Tag margin */
+}
+
+/* The actual Input Field */
+.select2-container--default .select2-search--inline .select2-search__field {
+  width: 100% !important;
+  margin-top: 0 !important;
+  margin-left: 5px !important; /* Small gap from previous tag */
+
+  /* Height Match */
+  height: 30px !important; /* Matches Tag height exactly */
+  line-height: 30px !important; /* Centers placeholder text vertically */
+
+  /* Font */
+  font-size: 14px !important;
+  font-family: inherit !important;
+
+  /* Remove default borders */
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Placeholder Visibility Logic */
+.select2-container--focus .select2-search__field::placeholder {
+  color: transparent !important;
+}
+
+/* ==========================================================================
+   4. MODAL-STYLE DROPDOWN
+   ========================================================================== */
+.select2-dropdown {
+  border: none !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  background: #ffffff;
+  margin-top: 8px;
+  padding: 8px 0;
+  z-index: 9999 !important;
+}
+
+.select2-results__option {
+  padding: 10px 16px !important;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.select2-container--default
+  .select2-results__option--highlighted[aria-selected] {
+  background-color: #f0f9ff !important;
+  color: #0284c7 !important;
+  font-weight: 600;
+  border-left: 3px solid #0284c7;
+}
+/* Place this in: static/admin/css/admin_enhanced_scroll.css */
+
+/* Make horizontal scrollbar more visible */
+#result_list {
+  overflow-x: auto;
+}
+
+/* Custom scrollbar styling (Webkit browsers) */
+#result_list::-webkit-scrollbar {
+  height: 12px;
+}
+
+#result_list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 6px;
+}
+
+#result_list::-webkit-scrollbar-thumb {
+  background: #417690;
+  border-radius: 6px;
+}
+
+#result_list::-webkit-scrollbar-thumb:hover {
+  background: #2e5d75;
+}
+
+/* Sticky first column (optional - helps with navigation) */
+#result_list thead th:first-child,
+#result_list tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: white;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+#result_list thead th:first-child {
+  z-index: 11;
+  background: #417690;
+}
+
+/* Floating scroll indicator */
+.scroll-indicator {
+  position: fixed;
+  top: 50%;
+  right: 30px;
+  background: rgba(65, 118, 144, 0.9);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 5px;
+  font-size: 12px;
+  z-index: 9999;
+  display: none;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Hover effects for better UX */
+#result_list tbody tr:hover {
+  background-color: #f5f5f5;
+}
