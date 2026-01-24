@@ -46,13 +46,13 @@ class Analysis(models.Model):
         db_column='TCM Diagnosis - High', verbose_name="TCM Diagnosis (High)", blank=True, null=True)
     # -----------------------------------------------------
 
-    organs_conv_func = models.TextField(
-        db_column='Governing Organs (Conventional & Functional)', verbose_name="Organs (Conv & Func)", blank=True, null=True)
-    organs_tcm = models.TextField(
-        db_column='Governing Organs (TCM)', verbose_name="Organs (TCM)", blank=True, null=True)
+    # organs_conv_func = models.TextField(
+    #     db_column='Governing Organs (Conventional & Functional)', verbose_name="Organs (Conv & Func)", blank=True, null=True)
+    # organs_tcm = models.TextField(
+    #     db_column='Governing Organs (TCM)', verbose_name="Organs (TCM)", blank=True, null=True)
 
-    possible_assoc_pathogens = models.TextField(
-        db_column='Possible associated pathogens', verbose_name="Possible Assoc Pathogens", blank=True, null=True)
+    # possible_assoc_pathogens = models.TextField(
+    #     db_column='Possible associated pathogens', verbose_name="Possible Assoc Pathogens", blank=True, null=True)
 
     # 2. Severity: Custom "Select" text
     severity = models.IntegerField(
@@ -68,10 +68,10 @@ class Analysis(models.Model):
     # severity = models.IntegerField(
     #     db_column='Deviation Severity (1-5)', verbose_name="Severity (1-5)", blank=True, null=True)
 
-    pathogens_low = models.TextField(db_column='Possible Pathogens (Low Result)',
-                                     verbose_name="Pathogens (Low Result)", blank=True, null=True)
-    pathogens_high = models.TextField(db_column='Possible Pathogens (High Result)',
-                                      verbose_name="Pathogens (High Result)", blank=True, null=True)
+    # pathogens_low = models.TextField(db_column='Possible Pathogens (Low Result)',
+    #                                  verbose_name="Pathogens (Low Result)", blank=True, null=True)
+    # pathogens_high = models.TextField(db_column='Possible Pathogens (High Result)',
+    #                                   verbose_name="Pathogens (High Result)", blank=True, null=True)
 
 # 1. Vital Marker: Strictly Yes/No, Default No
     vital_marker = models.CharField(
@@ -146,14 +146,14 @@ class Pattern(models.Model):
         max_length=255, db_column='TCM Body Type - Tertiary', verbose_name="TCM Body Type - Tertiary", blank=True, null=True)
 
     # 14-15. Impacts
-    positive_impacts = models.TextField(db_column='Medication/Suppliments - Positive Impacts',
-                                        verbose_name="Medication/Suppliments - Positive Impacts", blank=True, null=True)
-    negative_impacts = models.TextField(db_column='Medication/Suppliments - Negative Impacts',
-                                        verbose_name="Medication/Suppliments - Negative Impacts", blank=True, null=True)
+    # positive_impacts = models.TextField(db_column='Medication/Suppliments - Positive Impacts',
+    #                                     verbose_name="Medication/Suppliments - Positive Impacts", blank=True, null=True)
+    # negative_impacts = models.TextField(db_column='Medication/Suppliments - Negative Impacts',
+    #                                     verbose_name="Medication/Suppliments - Negative Impacts", blank=True, null=True)
 
-    # 16. Rationale
-    rationale = models.TextField(
-        db_column='Rationale', verbose_name="Rationale", blank=True, null=True)
+    # # 16. Rationale
+    # rationale = models.TextField(
+    #     db_column='Rationale', verbose_name="Rationale", blank=True, null=True)
 
     # 17. Pathogenci factor (Original DB spelling)
     pathogenic_factor = models.CharField(
@@ -178,8 +178,8 @@ class FunctionalCategory(models.Model):
         max_length=255, db_column='Primary Category')
     secondary_category = models.CharField(
         max_length=255, db_column='Secondary Category', blank=True, null=True)
-    tertiary_category = models.CharField(
-        max_length=255, db_column='Tertiary Category', blank=True, null=True)
+    # tertiary_category = models.CharField(
+    #     max_length=255, db_column='Tertiary Category', blank=True, null=True)
 
     class Meta:
         managed = False
@@ -581,7 +581,12 @@ class MedicationMapping(models.Model):
 
 class MedicationScoreDef(models.Model):
     id = models.BigAutoField(primary_key=True)
-    score = models.IntegerField(db_column='Score')
+    # score = models.IntegerField(db_column='Score')
+    score = models.CharField(
+        max_length=255,
+        db_column='Score',   # <--- Apply the same fix here
+        unique=True
+    )
     definition = models.TextField(
         db_column='Working definition', blank=True, null=True)
 
@@ -745,7 +750,12 @@ class SupplementMapping(models.Model):
 
 class SupplementScoreDef(models.Model):
     id = models.BigAutoField(primary_key=True)
-    score = models.IntegerField(db_column='Score')
+    # score = models.IntegerField(db_column='Score')
+    score = models.CharField(
+        max_length=255,
+        db_column='Score',   # <--- Apply the same fix here
+        unique=True
+    )
     definition = models.TextField(
         db_column='Working definition', blank=True, null=True)
 
