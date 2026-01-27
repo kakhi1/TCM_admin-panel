@@ -871,13 +871,8 @@ class TCMPathogenDefinition(models.Model):
 
     def __str__(self):
         return self.pathogen
-
-# ==============================================================================
-# PROXY MODELS FOR ADMIN GROUPING (NEW CODE)
-# These models map the real tables to the "Virtual Apps" for Sidebar Grouping
-# ==============================================================================
-
 # --- GROUP 1: Core Blood Markers & Pattern Mapping ---
+# Order: Blood(1) -> Patterns(2) -> Body(3) -> Pathogen(4) -> Functional(5)
 
 
 class BloodMarkersProxy(Analysis):
@@ -885,7 +880,7 @@ class BloodMarkersProxy(Analysis):
         proxy = True
         app_label = 'ui_core'
         verbose_name = "Blood Marker"
-        verbose_name_plural = "Blood Markers"
+        verbose_name_plural = "\u200bBlood Markers"  # 1 Space
 
 
 class PatternProxy(Pattern):
@@ -893,7 +888,7 @@ class PatternProxy(Pattern):
         proxy = True
         app_label = 'ui_core'
         verbose_name = "TCM Pattern"
-        verbose_name_plural = "TCM Patterns"
+        verbose_name_plural = "\u200b\u200bTCM Patterns"  # 2 Spaces
 
 
 class TCMBodyTypeProxy(TCMBodyTypeMapping):
@@ -901,7 +896,7 @@ class TCMBodyTypeProxy(TCMBodyTypeMapping):
         proxy = True
         app_label = 'ui_core'
         verbose_name = "TCM Body Type Mapping"
-        verbose_name_plural = "TCM Body Type Mapping"
+        verbose_name_plural = "\u200b\u200b\u200bTCM Body Type Mapping"  # 3 Spaces
 
 
 class TCMPathogenProxy(TCMPathogenDefinition):
@@ -909,7 +904,7 @@ class TCMPathogenProxy(TCMPathogenDefinition):
         proxy = True
         app_label = 'ui_core'
         verbose_name = "TCM Pathogen Definition"
-        verbose_name_plural = "TCM Pathogen Definitions"
+        verbose_name_plural = "\u200b\u200b\u200b\u200bTCM Pathogen Definitions"  # 4 Spaces
 
 
 class FunctionalCategoryProxy(FunctionalCategory):
@@ -917,17 +912,18 @@ class FunctionalCategoryProxy(FunctionalCategory):
         proxy = True
         app_label = 'ui_core'
         verbose_name = "Functional Medicine Indication"
-        verbose_name_plural = "Functional Medicine Indications"
+        verbose_name_plural = "\u200b\u200b\u200b\u200b\u200bFunctional Medicine Indications"  # 5 Spaces
 
 
 # --- GROUP 2: Medical Conditions & Symptoms ---
+# Order: Symptoms(1) -> Conditions(2)
 
 class SymptomCategoryProxy(SymptomCategory):
     class Meta:
         proxy = True
         app_label = 'ui_medical'
         verbose_name = "Symptoms Category Mapping"
-        verbose_name_plural = "Symptoms Category Mapping"
+        verbose_name_plural = "\u200bSymptoms Category Mapping"
 
 
 class MedicalConditionProxy(MedicalCondition):
@@ -935,17 +931,18 @@ class MedicalConditionProxy(MedicalCondition):
         proxy = True
         app_label = 'ui_medical'
         verbose_name = "Medical Conditions Mapping"
-        verbose_name_plural = "Medical Conditions Mapping"
+        verbose_name_plural = "\u200b\u200bMedical Conditions Mapping"
 
 
 # --- GROUP 3: Medications & Supplements ---
+# Order: MedList(1) -> MedMap(2) -> MedScore(3) -> SuppList(4) -> SuppMap(5) -> SuppScore(6)
 
 class MedicationListProxy(MedicationList):
     class Meta:
         proxy = True
         app_label = 'ui_pharma'
         verbose_name = "Medications List"
-        verbose_name_plural = "Medications List"
+        verbose_name_plural = "\u200bMedications List"
 
 
 class MedicationMappingProxy(MedicationMapping):
@@ -953,7 +950,7 @@ class MedicationMappingProxy(MedicationMapping):
         proxy = True
         app_label = 'ui_pharma'
         verbose_name = "Medications Mapping"
-        verbose_name_plural = "Medications Mapping"
+        verbose_name_plural = "\u200b\u200bMedications Mapping"
 
 
 class MedicationScoreDefProxy(MedicationScoreDef):
@@ -961,7 +958,7 @@ class MedicationScoreDefProxy(MedicationScoreDef):
         proxy = True
         app_label = 'ui_pharma'
         verbose_name = "Medications Score Definition"
-        verbose_name_plural = "Medications Score Definitions"
+        verbose_name_plural = "\u200b\u200b\u200bMedications Score Definitions"
 
 
 class SupplementListProxy(SupplementList):
@@ -969,7 +966,7 @@ class SupplementListProxy(SupplementList):
         proxy = True
         app_label = 'ui_pharma'
         verbose_name = "Supplements List"
-        verbose_name_plural = "Supplements List"
+        verbose_name_plural = "\u200b\u200b\u200b\u200bSupplements List"
 
 
 class SupplementMappingProxy(SupplementMapping):
@@ -977,7 +974,7 @@ class SupplementMappingProxy(SupplementMapping):
         proxy = True
         app_label = 'ui_pharma'
         verbose_name = "Supplements Mapping"
-        verbose_name_plural = "Supplements Mapping"
+        verbose_name_plural = "\u200b\u200b\u200b\u200b\u200bSupplements Mapping"
 
 
 class SupplementScoreDefProxy(SupplementScoreDef):
@@ -985,17 +982,18 @@ class SupplementScoreDefProxy(SupplementScoreDef):
         proxy = True
         app_label = 'ui_pharma'
         verbose_name = "Supplement Score Definition"
-        verbose_name_plural = "Supplement Score Definitions"
+        verbose_name_plural = "\u200b\u200b\u200b\u200b\u200b\u200bSupplement Score Definitions"
 
 
 # --- GROUP 4: White Blood Cells Mapping ---
+# Order: Glossary(1) -> Matrix(2)
 
 class WBCGlossaryProxy(WBCGlossary):
     class Meta:
         proxy = True
         app_label = 'ui_wbc'
         verbose_name = "WBC Glossary"
-        verbose_name_plural = "WBC Glossary"
+        verbose_name_plural = "\u200bWBC Glossary"
 
 
 class WBCMatrixProxy(WBCMatrix):
@@ -1003,14 +1001,15 @@ class WBCMatrixProxy(WBCMatrix):
         proxy = True
         app_label = 'ui_wbc'
         verbose_name = "WBC Matrix"
-        verbose_name_plural = "WBC Matrix"
+        verbose_name_plural = "\u200b\u200bWBC Matrix"
 
 
 # --- GROUP 5: Lifestyle ---
+# Changed app_label to 'ui_z_lifestyle' to sort AFTER 'ui_wbc'
 
 class LifestyleQuestionnaireProxy(LifestyleQuestionnaire):
     class Meta:
         proxy = True
-        app_label = 'ui_lifestyle'
+        app_label = 'ui_lifestyle'  # <--- CRITICAL FIX: Must match your actual installed app
         verbose_name = "Lifestyle & Dietary Questionnaire"
         verbose_name_plural = "Lifestyle & Dietary Questionnaire"

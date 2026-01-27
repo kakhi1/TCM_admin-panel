@@ -1,4 +1,5 @@
 
+from django.contrib import messages
 from django.http import HttpResponse
 from django.utils.html import escape
 from django.utils.html import escape  # Import this
@@ -813,93 +814,350 @@ def format_list_string(value):
 #         return HttpResponse(html)
 
 
+# class RemindUpdateMixin:
+#     """
+#     SMART VALIDATION MIXIN (Universal):
+#     1. Standard Check: Checks if value exists in target table.
+#     2. Split Check: If a delimiter (e.g. ';') is provided, splits DB text before checking.
+#     """
+#     # Structure: [ (['fields'], TargetModel, 'lookup_field', 'url', 'Page Name', 'Message', 'OPTIONAL_DELIMITER') ]
+#     validation_map = []
+
+#     def save_model(self, request, obj, form, change):
+#         active_validations = []
+#         triggered = False
+
+#         if not self.validation_map:
+#             super().save_model(request, obj, form, change)
+#             return
+
+#         for entry in self.validation_map:
+#             # Initialize defaults
+#             target_delimiter = None
+
+#             # 1. HANDLE NEW FORMAT (7 items - with delimiter)
+#             if len(entry) == 7:
+#                 fields, target_model, lookup_field, url_name, display_name, message, target_delimiter = entry
+
+#             # 2. HANDLE OLD FORMAT (6 items - Standard) - SAFE FALLBACK
+#             elif len(entry) == 6:
+#                 fields, target_model, lookup_field, url_name, display_name, message = entry
+
+#             # Skip invalid configurations
+#             else:
+#                 continue
+
+#             for field in fields:
+#                 value = form.cleaned_data.get(field)
+#                 if value:
+#                     # A. Parse the Form Input (what user typed)
+#                     if isinstance(value, list):
+#                         items = value
+#                     else:
+#                         # Split form input by semicolon or comma (Standardize input)
+#                         items = [x.strip() for x in str(value).replace(
+#                             ';', ',').split(',') if x.strip()]
+
+#                     # B. Fetch Database Values
+#                     raw_db_values = target_model.objects.values_list(
+#                         lookup_field, flat=True)
+
+#                     # C. Build Allowed List
+#                     existing_values = set()
+
+#                     if target_delimiter:
+#                         # --- SPECIAL LOGIC: Split DB values (e.g. for Symptoms) ---
+#                         for db_val in raw_db_values:
+#                             if db_val:
+#                                 parts = [x.strip() for x in str(db_val).split(
+#                                     target_delimiter) if x.strip()]
+#                                 existing_values.update(parts)
+#                     else:
+#                         # --- STANDARD LOGIC: Exact match (for everyone else) ---
+#                         existing_values = set(raw_db_values)
+
+#                     # D. Compare
+#                     missing = [
+#                         item for item in items if item not in existing_values]
+
+#                     if missing:
+#                         triggered = True
+#                         detailed_msg = f"{message}<br><strong>New/Missing Items:</strong> {', '.join(missing)}"
+#                         try:
+#                             url = reverse(url_name)
+#                             active_validations.append({
+#                                 'url': url,
+#                                 'name': display_name,
+#                                 'message': mark_safe(detailed_msg)
+#                             })
+#                         except Exception:
+#                             pass
+#                         break
+
+#         if not triggered:
+#             super().save_model(request, obj, form, change)
+#         else:
+#             # Pause save and trigger interception page
+#             request._needs_interception = True
+#             request._active_validations = active_validations
+
+#     def response_add(self, request, obj, post_url_continue=None):
+#         if getattr(request, '_needs_interception', False):
+#             return self._build_interception_page(request)
+#         return super().response_add(request, obj, post_url_continue)
+
+#     def response_change(self, request, obj):
+#         if getattr(request, '_needs_interception', False):
+#             return self._build_interception_page(request)
+#         return super().response_change(request, obj)
+
+#     def _build_interception_page(self, request):
+#         active_validations = getattr(request, '_active_validations', [])
+#         validation_html = ""
+#         for item in active_validations:
+#             validation_html += f"""
+#             <div class="validation-item">
+#                 <div class="validation-msg">{item['message']}</div>
+#                 <a href="{item['url']}" target="_blank" class="link-btn">
+#                     🔗 Go to {item['name']}
+#                 </a>
+#             </div>
+#             """
+#         html = f"""
+#         <!DOCTYPE html>
+#         <html>
+#         <head>
+#             <title>Verification Required</title>
+#             <style>
+#                 body {{ font-family: -apple-system, system-ui, sans-serif; background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
+#                 .card {{ background: white; padding: 40px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 600px; width: 100%; border-top: 6px solid #dc3545; }}
+#                 h2 {{ color: #dc3545; margin-top: 0; }}
+#                 .validation-item {{ background: #fff5f5; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 15px; text-align: left; }}
+#                 .validation-msg {{ color: #721c24; font-weight: 600; margin-bottom: 10px; }}
+#                 .link-btn {{ display: inline-block; padding: 6px 12px; background: #fff; color: #dc3545; text-decoration: none; border: 1px solid #dc3545; border-radius: 4px; font-size: 13px; font-weight: bold; }}
+#                 .link-btn:hover {{ background: #dc3545; color: white; }}
+#                 .back-btn {{ width: 100%; padding: 15px; background: #6c757d; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }}
+#                 .back-btn:hover {{ background: #5a6268; }}
+#             </style>
+#         </head>
+#         <body>
+#             <div class="card">
+#                 <h2>⚠️ Verification Required</h2>
+#                 <p>You entered data that does not exist in the linked tables yet.</p>
+#                 {validation_html}
+#                 <button class="back-btn" onclick="window.history.back();">⬅ Go Back & Fix</button>
+#             </div>
+#         </body>
+#         </html>
+#         """
+#         return HttpResponse(html)
+
+
+# class RemindUpdateMixin:
+#     """
+#     SMART VALIDATION MIXIN:
+#     1. Universal Case: Shows a top banner reminder (warning) after Add/Edit/Delete.
+#     2. Strict Case: Pauses save for a custom verification page if specific items are missing.
+#     """
+#     universal_reminders = []
+#     validation_map = []
+
+#     def show_universal_reminder(self, request):
+#         # Debug
+#         print(
+#             f"DEBUG: show_universal_reminder triggered for {self.__class__.__name__}")
+#         for url_name, display_name in self.universal_reminders:
+#             try:
+#                 url = reverse(url_name)
+#                 print(f"DEBUG: Reverse URL found: {url}")  # Debug
+#                 msg = format_html(
+#                     "A record has been Added/Deleted/Edited. "
+#                     "Please update the <strong><a href='{}' target='_blank'>{}</a></strong> "
+#                     "to reflect these changes into the system.",
+#                     url, display_name
+#                 )
+#                 messages.warning(request, msg)
+#                 # Debug
+#                 print("DEBUG: Message successfully added to Django Messages framework")
+#             except Exception as e:
+#                 # Debug
+#                 print(
+#                     f"DEBUG ERROR: Could not reverse URL {url_name}. Error: {e}")
+
+#     def save_model(self, request, obj, form, change):
+#         print(f"DEBUG: save_model called for {obj}")  # Debug
+
+#         # 1. Trigger Universal Reminder (The Top Banner)
+#         if self.universal_reminders:
+#             self.show_universal_reminder(request)
+#         else:
+#             print("DEBUG: No universal_reminders defined for this class")  # Debug
+
+#         # 2. YOUR EXISTING LOGIC (Preserved)
+#         if not self.validation_map:
+#             # Debug
+#             print("DEBUG: No validation_map defined. Proceeding with standard save.")
+#             super().save_model(request, obj, form, change)
+#             return
+
+#         # Debug
+#         print(
+#             f"DEBUG: validation_map found with {len(self.validation_map)} entries")
+#         active_validations = []
+#         triggered = False
+
+#         for entry in self.validation_map:
+#             target_delimiter = entry[6] if len(entry) == 7 else None
+#             fields, target_model, lookup_field, url_name, display_name, message = entry[:6]
+
+#             for field in fields:
+#                 value = form.cleaned_data.get(field)
+#                 if value:
+#                     items = value if isinstance(value, list) else [x.strip() for x in str(
+#                         value).replace(';', ',').split(',') if x.strip()]
+#                     raw_db_values = target_model.objects.values_list(
+#                         lookup_field, flat=True)
+#                     existing_values = set()
+
+#                     if target_delimiter:
+#                         for db_val in raw_db_values:
+#                             if db_val:
+#                                 parts = [x.strip() for x in str(db_val).split(
+#                                     target_delimiter) if x.strip()]
+#                                 existing_values.update(parts)
+#                     else:
+#                         existing_values = set(raw_db_values)
+
+#                     missing = [
+#                         item for item in items if item not in existing_values]
+#                     if missing:
+#                         # Debug
+#                         print(
+#                             f"DEBUG: STRICT VALIDATION TRIGGERED. Missing items: {missing}")
+#                         triggered = True
+#                         detailed_msg = f"{message}<br><strong>New/Missing Items:</strong> {', '.join(missing)}"
+#                         try:
+#                             active_validations.append({
+#                                 'url': reverse(url_name),
+#                                 'name': display_name,
+#                                 'message': mark_safe(detailed_msg)
+#                             })
+#                         except:
+#                             pass
+#                         break
+
+#         if not triggered:
+#             # Debug
+#             print("DEBUG: No missing items found in strict validation. Saving model.")
+#             super().save_model(request, obj, form, change)
+#         else:
+#             # Debug
+#             print("DEBUG: Intercepting response to show Verification Required page.")
+#             request._needs_interception = True
+#             request._active_validations = active_validations
+
+#     def delete_model(self, request, obj):
+#         print(f"DEBUG: delete_model called for {obj}")  # Debug
+#         if self.universal_reminders:
+#             self.show_universal_reminder(request)
+#         super().delete_model(request, obj)
+
+
 class RemindUpdateMixin:
     """
-    SMART VALIDATION MIXIN (Universal):
-    1. Standard Check: Checks if value exists in target table.
-    2. Split Check: If a delimiter (e.g. ';') is provided, splits DB text before checking.
+    SMART VALIDATION MIXIN:
+    1. Universal Case: Shows a top banner (Added/Updated/Deleted) after changes.
+    2. Strict Case: Original logic for 'Verification Required' page remains untouched.
     """
-    # Structure: [ (['fields'], TargetModel, 'lookup_field', 'url', 'Page Name', 'Message', 'OPTIONAL_DELIMITER') ]
+    # For Universal Banner: [('url_name', 'Page Name')]
+    universal_reminders = []
+
+    # YOUR ORIGINAL LOGIC - DO NOT DELETE
     validation_map = []
 
-    def save_model(self, request, obj, form, change):
-        active_validations = []
-        triggered = False
+    def _trigger_universal_banner(self, request, verb):
+        """Helper to show the banner at the top of the table."""
+        for url_name, display_name in self.universal_reminders:
+            try:
+                url = reverse(url_name)
+                msg = format_html(
+                    "A record has been <strong>{}</strong>. "
+                    "Please update the <strong><a href='{}' target='_blank'>{}</a></strong> "
+                    "to reflect these changes into the system.",
+                    verb, url, display_name
+                )
+                messages.warning(request, msg)
+            except Exception as e:
+                # Debug print for terminal troubleshooting
+                print(f"DEBUG ERROR: Could not reverse URL {url_name}: {e}")
 
+    def save_model(self, request, obj, form, change):
+        # 1. Trigger the Dynamic Universal Banner
+        verb = "Updated" if change else "Added"
+        if self.universal_reminders:
+            self._trigger_universal_banner(request, verb)
+
+        # 2. YOUR ORIGINAL STRICT VALIDATION LOGIC (Preserved Exactly)
         if not self.validation_map:
             super().save_model(request, obj, form, change)
             return
 
+        active_validations = []
+        triggered = False
         for entry in self.validation_map:
-            # Initialize defaults
-            target_delimiter = None
-
-            # 1. HANDLE NEW FORMAT (7 items - with delimiter)
-            if len(entry) == 7:
-                fields, target_model, lookup_field, url_name, display_name, message, target_delimiter = entry
-
-            # 2. HANDLE OLD FORMAT (6 items - Standard) - SAFE FALLBACK
-            elif len(entry) == 6:
-                fields, target_model, lookup_field, url_name, display_name, message = entry
-
-            # Skip invalid configurations
-            else:
-                continue
+            # Supports both 6 and 7 item formats from original code
+            target_delimiter = entry[6] if len(entry) == 7 else None
+            fields, target_model, lookup_field, url_name, display_name, message = entry[:6]
 
             for field in fields:
                 value = form.cleaned_data.get(field)
                 if value:
-                    # A. Parse the Form Input (what user typed)
-                    if isinstance(value, list):
-                        items = value
-                    else:
-                        # Split form input by semicolon or comma (Standardize input)
-                        items = [x.strip() for x in str(value).replace(
-                            ';', ',').split(',') if x.strip()]
-
-                    # B. Fetch Database Values
+                    # Parse input (handle lists or semicolon strings)
+                    items = value if isinstance(value, list) else [x.strip() for x in str(
+                        value).replace(';', ',').split(',') if x.strip()]
                     raw_db_values = target_model.objects.values_list(
                         lookup_field, flat=True)
-
-                    # C. Build Allowed List
                     existing_values = set()
 
                     if target_delimiter:
-                        # --- SPECIAL LOGIC: Split DB values (e.g. for Symptoms) ---
+                        # Split DB values based on provided delimiter
                         for db_val in raw_db_values:
                             if db_val:
                                 parts = [x.strip() for x in str(db_val).split(
                                     target_delimiter) if x.strip()]
                                 existing_values.update(parts)
                     else:
-                        # --- STANDARD LOGIC: Exact match (for everyone else) ---
                         existing_values = set(raw_db_values)
 
-                    # D. Compare
                     missing = [
                         item for item in items if item not in existing_values]
-
                     if missing:
                         triggered = True
                         detailed_msg = f"{message}<br><strong>New/Missing Items:</strong> {', '.join(missing)}"
                         try:
-                            url = reverse(url_name)
                             active_validations.append({
-                                'url': url,
+                                'url': reverse(url_name),
                                 'name': display_name,
                                 'message': mark_safe(detailed_msg)
                             })
-                        except Exception:
+                        except:
                             pass
                         break
 
         if not triggered:
             super().save_model(request, obj, form, change)
         else:
-            # Pause save and trigger interception page
+            # Pauses save and triggers your custom interception page
             request._needs_interception = True
             request._active_validations = active_validations
 
+    def delete_model(self, request, obj):
+        """Triggers the banner when a record is deleted."""
+        if self.universal_reminders:
+            self._trigger_universal_banner(request, "Deleted")
+        super().delete_model(request, obj)
+
+    # --- KEEP YOUR EXISTING RESPONSE INTERCEPTORS BELOW ---
     def response_add(self, request, obj, post_url_continue=None):
         if getattr(request, '_needs_interception', False):
             return self._build_interception_page(request)
@@ -910,7 +1168,13 @@ class RemindUpdateMixin:
             return self._build_interception_page(request)
         return super().response_change(request, obj)
 
+    def response_delete(self, request, obj_display, obj_id):
+        if getattr(request, '_needs_interception', False):
+            return self._build_interception_page(request)
+        return super().response_delete(request, obj_display, obj_id)
+
     def _build_interception_page(self, request):
+        """Original custom HTML page logic for verification."""
         active_validations = getattr(request, '_active_validations', [])
         validation_html = ""
         for item in active_validations:
@@ -950,8 +1214,6 @@ class RemindUpdateMixin:
         </html>
         """
         return HttpResponse(html)
-
-
 # ==============================================================================
 # 1. ANALYSIS (Search: Name, Acronym)
 # ==============================================================================
@@ -1118,8 +1380,7 @@ class AnalysisAdminForm(forms.ModelForm):
 @admin.register(BloodMarkersProxy)
 class AnalysisAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = AnalysisAdminForm
-    # --- SMART VALIDATION MAPPING ---
-    # Format: ( [Fields], ModelClass, 'Lookup_Column', 'URL_Name', 'Page Name', 'Error Message' )
+
     validation_map = [
         (
             ['tcm_diag_low', 'tcm_diag_high'],
@@ -1141,43 +1402,6 @@ class AnalysisAdmin(RemindUpdateMixin, admin.ModelAdmin):
         # but they are usually text fields in this form.
     ]
 # --- DYNAMIC MAPPING CONFIGURATION ---
-    # # Format: ( [List of Fields], 'URL Name', 'Link Label' )
-    # validation_map = [
-    #     (
-    #         ['tcm_diag_low', 'tcm_diag_high'],
-    #         'admin:ui_core_patternproxy_changelist',
-    #         'TCM Patterns Page',
-    #         "You referenced a TCM Diagnosis. Please ensure this Pattern exists in the system."
-    #     ),
-    #     (
-    #         ['func_diag_low', 'func_diag_high'],
-    #         'admin:ui_core_functionalcategoryproxy_changelist',
-    #         'Functional Medicine Page',
-    #         "You referenced a Functional Diagnosis. Please ensure this Category exists in the system."
-    #     ),
-    #     (
-    #         ['med_types_low', 'med_types_high'],
-    #         'admin:ui_pharma_medicationmappingproxy_changelist',
-    #         'Medication Mapping Page',
-    #         "You added a Medication Type. Please check the Medication Mapping table."
-    #     ),
-    #     (
-    #         ['supp_types_low', 'supp_types_high'],
-    #         'admin:ui_pharma_supplementmappingproxy_changelist',
-    #         'Supplement Mapping Page',
-    #         "You added a Supplement Type. Please check the Supplement Mapping table."
-    #     )
-    # ]
-
-    # # 2. LINKS TO SHOW (Always show ALL of them if triggered)
-    # related_pages = [
-    #     ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page'),
-    #     ('admin:ui_core_functionalcategoryproxy_changelist',
-    #      'Functional Medicine Indications'),
-    #     ('admin:ui_pharma_medicationmappingproxy_changelist', 'Medication Mapping Page'),
-    #     ('admin:ui_pharma_supplementmappingproxy_changelist', 'Supplement Mapping Page')
-    # ]
-
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('blood_test', 'blood_test_full',
                      'blood_test_acronym', 'panel', 'units', 'units_interchangeable', 'severity', 'vital_marker')
@@ -1413,126 +1637,13 @@ class PatternAdminForm(forms.ModelForm):
                            'data-tags': 'true', 'data-placeholder': 'Select Bottom Category...'}
                 )
 
-# class PatternAdminForm(forms.ModelForm):
-#     # (Keep your existing ChoiceFields for body types/pathogens here...)
-#     # 1. Body Types
-#     body_type_primary = forms.ChoiceField(
-#         required=False, label="TCM Body Type - Primary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     body_type_secondary = forms.ChoiceField(
-#         required=False, label="TCM Body Type - Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     body_type_tertiary = forms.ChoiceField(
-#         required=False, label="TCM Body Type - Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
-
-#     # 2. Pathogen
-#     pathogenic_factor = forms.ChoiceField(
-#         required=False, label="Pathogenic Factor", widget=forms.Select(attrs=WIDGET_ATTRS))
-
-#     # 3. Excess/Deficiency
-#     excess_deficiency = forms.ChoiceField(
-#         choices=[
-#             ('', 'Select Type...'),
-#             ('Excess', 'Excess'),
-#             ('Deficiency', 'Deficiency'),
-#             ('General', 'General')
-#         ],
-#         required=False,
-#         label="Excess/Deficiency/General",
-#         widget=forms.Select(attrs=WIDGET_ATTRS)
-#     )
-
-#     class Meta:
-#         model = Pattern
-#         fields = '__all__'
-#         widgets = {
-#             # Attach the new Strict Widget
-#             'symptoms': StrictSemicolonListWidget(),
-#         }
-
-#     @property
-#     def media(self): return forms.Media(**SHARED_MEDIA)
-
-#     def __init__(self, *args, **kwargs):
-#         super(PatternAdminForm, self).__init__(*args, **kwargs)
-
-#         # --- A. POPULATE SYMPTOMS (Strict List) ---
-#         # 1. Fetch symptoms from SymptomCategory (only valid source)
-#         symptom_pool = list(SymptomCategory.objects.exclude(symptoms__isnull=True)
-#                             .exclude(symptoms__exact='')
-#                             .values_list('symptoms', flat=True)
-#                             .distinct()
-#                             .order_by('symptoms'))
-
-#         # 2. Pass choices to the widget
-#         if 'symptoms' in self.fields:
-#             self.fields['symptoms'].widget.data_choices = symptom_pool
-
-#         # --- B. EXISTING LOGIC (Body Types, Pathogens, Middle/Bottom Groups) ---
-#         # (Keep the rest of your logic exactly as it was)
-
-#         body_types = list(TCMBodyTypeMapping.objects.values_list(
-#             'tcm_body_type', flat=True).distinct())
-#         pathogens = list(TCMPathogenDefinition.objects.values_list(
-#             'pathogen', flat=True).distinct())
-
-#         bt_choices = [('', 'Select Body Type...')] + [(b, b)
-#                                                       for b in body_types if b]
-#         p_choices = [('', 'Select Pathogen...')] + [(p, p)
-#                                                     for p in pathogens if p]
-
-#         self.fields['body_type_primary'].choices = bt_choices
-#         self.fields['body_type_secondary'].choices = bt_choices
-#         self.fields['body_type_tertiary'].choices = bt_choices
-#         self.fields['pathogenic_factor'].choices = p_choices
-
-#         # --- Middle vs Bottom Groups Logic ---
-#         middle_group = ['middle_primary', 'middle_secondary',
-#                         'middle_tertiary', 'middle_quantery']
-#         bottom_group = ['bottom_primary', 'bottom_secondary']
-
-#         def get_pooled_choices(column_names):
-#             pool = set()
-#             for col in column_names:
-#                 values = Pattern.objects.values_list(col, flat=True).distinct()
-#                 for val in values:
-#                     if val:
-#                         pool.add(val)
-#             return [('', '')] + [(v, v) for v in sorted(list(pool))]
-
-#         middle_choices = get_pooled_choices(middle_group)
-#         bottom_choices = get_pooled_choices(bottom_group)
-
-#         for f_name in middle_group:
-#             if f_name in self.fields:
-#                 self.fields[f_name].widget = forms.Select(
-#                     choices=middle_choices,
-#                     attrs={'class': 'advanced-select', 'style': 'width: 100%',
-#                            'data-tags': 'true', 'data-placeholder': 'Select Middle Category...'}
-#                 )
-
-#         for f_name in bottom_group:
-#             if f_name in self.fields:
-#                 self.fields[f_name].widget = forms.Select(
-#                     choices=bottom_choices,
-#                     attrs={'class': 'advanced-select', 'style': 'width: 100%',
-#                            'data-tags': 'true', 'data-placeholder': 'Select Bottom Category...'}
-#                 )
-
-#         # Safety Check for existing values
-#         instance = getattr(self, 'instance', None)
-#         if instance and instance.pk:
-#             all_target_fields = middle_group + bottom_group
-#             for f_name in all_target_fields:
-#                 val = getattr(instance, f_name, None)
-#                 if val:
-#                     existing_keys = [
-#                         k for k, v in self.fields[f_name].widget.choices]
-#                     if val not in existing_keys:
-#                         self.fields[f_name].widget.choices.append((val, val))
-
 
 @admin.register(PatternProxy)
 class PatternAdmin(RemindUpdateMixin, admin.ModelAdmin):
-
+    # --- SMART VALIDATION MAPPING ---
+    # Format: ( [Fields], ModelClass, 'Lookup_Column', 'URL_Name', 'Page Name', 'Error Message' )
+    universal_reminders = [
+        ('admin:ui_core_bloodmarkersproxy_changelist', 'Blood Markers Page')]
     # --- 2. CONNECT THE FORM ---
     form = PatternAdminForm
 # --- SMART VALIDATION MAPPING ---
@@ -1639,6 +1750,55 @@ class PatternAdmin(RemindUpdateMixin, admin.ModelAdmin):
     #     return self._create_click_to_open(obj.rationale)
     # rationale_click.short_description = "Rationale"
 
+# @admin.register(TCMBodyTypeMapping)
+
+
+@admin.register(TCMBodyTypeProxy)
+class TCMBodyTypeMappingAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: Body Type -> TCM Patterns ---
+    universal_reminders = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')]
+    related_pages = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')
+    ]
+    # --- ADDED SEARCH FIELDS ---
+    search_fields = ('tcm_body_type', 'tcm_explanation',
+                     'func_equivalent', 'func_explanation')
+    list_filter = ('tcm_body_type',)
+
+    # --- EXISTING STRUCTURE PRESERVED ---
+    list_display = (
+        'tcm_body_type', 'tcm_explanation',
+        'func_equivalent', 'func_explanation'
+    )
+    fields = (
+        'tcm_body_type', 'tcm_explanation',
+        'func_equivalent', 'func_explanation'
+    )
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
+    list_display_links = ('tcm_body_type',)
+    list_per_page = 50
+
+
+@admin.register(TCMPathogenProxy)
+# @admin.register(TCMPathogenDefinition)
+class TCMPathogenDefinitionAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: Pathogens -> TCM Patterns ---
+    universal_reminders = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')]
+    related_pages = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')
+    ]
+    # --- ADDED SEARCH FIELDS ---
+    search_fields = ('pathogen', 'definition')
+    list_filter = ('pathogen',)
+
+    # --- EXISTING STRUCTURE PRESERVED ---
+    list_display = ('pathogen', 'definition')
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
+
 # ==============================================================================
 # 3. FUNCTIONAL & SYMPTOMS (Formatting Enforced)
 # ==============================================================================
@@ -1710,17 +1870,22 @@ class FunctionalCategoryAdminForm(forms.ModelForm):
 class FunctionalCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = FunctionalCategoryAdminForm  # <--- Connect the custom form here
 # --- REQUIREMENT C MAPPING: Functional Med -> Blood Markers ---
-    validation_map = [
-        (
-            ['functional_medicine'],
-            'admin:ui_core_bloodmarkersproxy_changelist',
-            'Blood Markers Page',
-            "You modified a Functional Category Name. Please ensure Blood Markers referencing this are updated."
-        )
-    ]
-    related_pages = [
-        ('admin:ui_core_bloodmarkersproxy_changelist', 'Blood Markers Page')
-    ]
+# # FIX: Ensure there are exactly 6 items in the list inside the map
+#     validation_map = [
+#         (
+#             ['functional_medicine'],             # 1. Fields to check
+#             # 2. Target Model (Not a string)
+#             BloodMarkersProxy,
+#             'blood_test',                        # 3. Lookup column
+#             'admin:ui_core_bloodmarkersproxy_changelist',  # 4. URL Name
+#             'Blood Markers Page',                # 5. Page Name
+#             "Validation Message Here"            # 6. Error Message
+#         )
+#     ]
+
+    # Add your Universal Reminder separately as planned
+    universal_reminders = [
+        ('admin:ui_core_bloodmarkersproxy_changelist', 'Blood Markers Page')]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('functional_medicine',
                      'primary_category', 'secondary_category')
@@ -1735,129 +1900,6 @@ class FunctionalCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
 
     @property
     def media(self): return forms.Media(**SHARED_MEDIA)
-
-
-# class SymptomCategoryAdminForm(forms.ModelForm):
-#     # 1. Selector for Symptoms (Source: Pattern model)
-#     symptoms = forms.ChoiceField(
-#         required=False,
-#         label="Symptom (from Patterns)",
-#         widget=forms.Select(attrs=WIDGET_ATTRS)
-#     )
-
-#     class Meta:
-#         model = SymptomCategory
-#         fields = '__all__'
-
-#     @property
-#     def media(self):
-#         return forms.Media(**SHARED_MEDIA)
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # --- A. Populate SYMPTOMS from Pattern model ---
-#         # 1. Fetch all raw symptom strings (e.g., "Headache; Nausea")
-#         raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
-
-#         # 2. Parse and Flatten: Split by ';', strip whitespace, and uniquify
-#         unique_symptoms = set()
-#         for entry in raw_pattern_data:
-#             if entry:
-#                 # Split by semicolon and clean up whitespace
-#                 parts = [x.strip() for x in entry.split(';') if x.strip()]
-#                 unique_symptoms.update(parts)
-
-#         # 3. Sort and Create Choices
-#         sorted_symptoms = sorted(list(unique_symptoms))
-#         symptom_choices = [('', 'Select Symptom...')] + [(s, s)
-#                                                          for s in sorted_symptoms]
-
-#         # 4. Assign to field
-#         self.fields['symptoms'].choices = symptom_choices
-
-#         # --- B. Populate CATEGORIES from FunctionalCategory model ---
-#         cats = list(FunctionalCategory.objects.values_list(
-#             'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
-
-#         cat_choices = [('', 'Select Category...')] + [(c, c)
-#                                                       for c in cats if c]
-#         self.fields['primary_category'].choices = cat_choices
-
-#         # --- C. Set Initial Values for Edit Mode ---
-#         instance = getattr(self, 'instance', None)
-#         if instance and instance.pk:
-#             # If the current value isn't in the list (e.g. custom text), add it to prevent data loss
-#             current_sym = instance.symptoms
-#             if current_sym and current_sym not in unique_symptoms:
-#                 self.fields['symptoms'].choices.append(
-#                     (current_sym, current_sym))
-
-#             current_cat = instance.primary_category
-#             if current_cat and current_cat not in cats:
-#                 self.fields['primary_category'].choices.append(
-#                     (current_cat, current_cat))
-
-
-# class SymptomCategoryAdminForm(forms.ModelForm):
-#     # 1. Symptoms (Source: Pattern model) - Keep as DynamicChoiceField to allow new ones
-#     symptoms = DynamicChoiceField(
-#         required=False,
-#         label="Symptom (from Patterns)",
-#         widget=forms.Select(attrs=WIDGET_ATTRS)
-#     )
-
-#     # 2. Primary Category (Source: FunctionalCategory) - Change to DynamicChoiceField
-#     primary_category = DynamicChoiceField(
-#         required=False,
-#         label="Primary Category",
-#         widget=forms.Select(attrs=WIDGET_ATTRS)
-#     )
-
-#     class Meta:
-#         model = SymptomCategory
-#         fields = '__all__'
-
-#     @property
-#     def media(self):
-#         return forms.Media(**SHARED_MEDIA)
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # --- A. SYMPTOMS ---
-#         raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
-#         unique_symptoms = set()
-#         for entry in raw_pattern_data:
-#             if entry:
-#                 parts = [x.strip() for x in entry.split(';') if x.strip()]
-#                 unique_symptoms.update(parts)
-
-#         sorted_symptoms = sorted(list(unique_symptoms))
-#         symptom_choices = [('', 'Select Symptom...')] + [(s, s)
-#                                                          for s in sorted_symptoms]
-#         self.fields['symptoms'].choices = symptom_choices
-
-#         # --- B. CATEGORIES ---
-#         cats = list(FunctionalCategory.objects.values_list(
-#             'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
-
-#         cat_choices = [('', 'Select Category...')] + [(c, c)
-#                                                       for c in cats if c]
-#         self.fields['primary_category'].choices = cat_choices
-
-#         # --- C. PRESERVE DATA ---
-#         instance = getattr(self, 'instance', None)
-#         if instance and instance.pk:
-#             current_sym = instance.symptoms
-#             if current_sym and current_sym not in unique_symptoms:
-#                 self.fields['symptoms'].choices.append(
-#                     (current_sym, current_sym))
-
-#             current_cat = instance.primary_category
-#             if current_cat and current_cat not in cats:
-#                 self.fields['primary_category'].choices.append(
-#                     (current_cat, current_cat))
 
 
 class SymptomCategoryAdminForm(forms.ModelForm):
@@ -1946,7 +1988,8 @@ class SymptomCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = SymptomCategoryAdminForm
     # --- REQUIREMENT C MAPPING: Symptoms -> TCM Patterns ---
 # --- SMART VALIDATION MAPPING ---
-# --- SMART VALIDATION MAPPING ---
+    universal_reminders = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')]
     validation_map = [
         # 1. CHECK SYMPTOMS (Against TCM Patterns)
         (
@@ -2084,6 +2127,7 @@ class MedicalConditionAdminForm(forms.ModelForm):
 class MedicalConditionAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = MedicalConditionAdminForm
 # --- SMART VALIDATION MAPPING ---
+
     validation_map = [
         # 1. Check TCM Patterns
         (
@@ -2122,278 +2166,6 @@ class MedicalConditionAdmin(RemindUpdateMixin, admin.ModelAdmin):
 
 
 # ==============================================================================
-# 5. WBC GLOSSARY & MATRIX (Search Enabled)
-# ==============================================================================
-@admin.register(WBCGlossaryProxy)
-class WBCGlossaryAdmin(RemindUpdateMixin, admin.ModelAdmin):
-    # --- REQUIREMENT C MAPPING: WBC Glossary -> WBC Matrix ---
-    related_pages = [
-        ('admin:ui_wbc_wbcmatrixproxy_changelist', 'WBC Matrix Page')
-    ]
-    # --- ADDED SEARCH FIELDS ---
-    search_fields = ('term', 'definition', 'next_steps')
-
-    # --- EXISTING STRUCTURE PRESERVED ---
-    list_display = ('term', 'definition', 'next_steps')
-    fields = ('term', 'definition', 'next_steps')
-    list_filter = ('term',)
-    list_display_links = ('term',)
-    list_per_page = 50
-    @property
-    def media(self): return forms.Media(**SHARED_MEDIA)
-
-
-# class WBCMatrixAdminForm(forms.ModelForm):
-#     # Use ChoiceFields for the Interpretation Hierarchy so they select from WBCGlossary
-#     primary_int = forms.ChoiceField(
-#         required=False, label="Primary Interpretation", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     secondary = forms.ChoiceField(
-#         required=False, label="Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     tertiary = forms.ChoiceField(
-#         required=False, label="Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     quaternary = forms.ChoiceField(
-#         required=False, label="Quaternary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     quinary = forms.ChoiceField(
-#         required=False, label="Quinary", widget=forms.Select(attrs=WIDGET_ATTRS))
-
-#     class Meta:
-#         model = WBCMatrix
-#         fields = '__all__'
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # 1. Fetch Terms from WBCGlossary
-#         terms = list(WBCGlossary.objects.values_list(
-#             'term', flat=True).distinct().order_by('term'))
-
-#         # 2. Create Choices List
-#         term_choices = [('', 'Select Term...')] + [(t, t) for t in terms if t]
-
-#         # 3. Assign choices to the fields
-#         self.fields['primary_int'].choices = term_choices
-#         self.fields['secondary'].choices = term_choices
-#         self.fields['tertiary'].choices = term_choices
-#         self.fields['quaternary'].choices = term_choices
-#         self.fields['quinary'].choices = term_choices
-
-#         # 4. Set Initial Values (if editing an existing record)
-#         instance = getattr(self, 'instance', None)
-#         if instance and instance.pk:
-#             current_values = [
-#                 instance.primary_int, instance.secondary, instance.tertiary,
-#                 instance.quaternary, instance.quinary
-#             ]
-#             for val in current_values:
-#                 if val and val not in terms:
-#                     term_choices.append((val, val))
-
-#             self.fields['primary_int'].choices = term_choices
-#             self.fields['secondary'].choices = term_choices
-#             self.fields['tertiary'].choices = term_choices
-#             self.fields['quaternary'].choices = term_choices
-#             self.fields['quinary'].choices = term_choices
-
-#     @property
-#     def media(self): return forms.Media(**SHARED_MEDIA)
-
-class WBCMatrixAdminForm(forms.ModelForm):
-    # Change ALL to DynamicChoiceField
-    primary_int = DynamicChoiceField(
-        required=False, label="Primary Interpretation", widget=forms.Select(attrs=WIDGET_ATTRS))
-    secondary = DynamicChoiceField(
-        required=False, label="Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    tertiary = DynamicChoiceField(
-        required=False, label="Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    quaternary = DynamicChoiceField(
-        required=False, label="Quaternary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    quinary = DynamicChoiceField(
-        required=False, label="Quinary", widget=forms.Select(attrs=WIDGET_ATTRS))
-
-    class Meta:
-        model = WBCMatrix
-        fields = '__all__'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        terms = list(WBCGlossary.objects.values_list(
-            'term', flat=True).distinct().order_by('term'))
-        term_choices = [('', 'Select Term...')] + [(t, t) for t in terms if t]
-
-        self.fields['primary_int'].choices = term_choices
-        self.fields['secondary'].choices = term_choices
-        self.fields['tertiary'].choices = term_choices
-        self.fields['quaternary'].choices = term_choices
-        self.fields['quinary'].choices = term_choices
-
-        # Check existing values and add them if missing
-        instance = getattr(self, 'instance', None)
-        if instance and instance.pk:
-            for field in ['primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary']:
-                val = getattr(instance, field)
-                if val and val not in terms:
-                    self.fields[field].choices.append((val, val))
-
-    @property
-    def media(self): return forms.Media(**SHARED_MEDIA)
-
-
-@admin.register(WBCMatrixProxy)
-class WBCMatrixAdmin(RemindUpdateMixin, admin.ModelAdmin):
-    form = WBCMatrixAdminForm
-    validation_map = [
-        # Check: WBC Glossary Terms
-        (
-            ['primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary'],
-            WBCGlossary,                 # Target Model
-            'term',                      # Target Column
-            'admin:ui_wbc_wbcglossaryproxy_changelist',
-            'WBC Glossary',
-            "You used a Term that is not defined in the WBC Glossary."
-        )
-    ]
-
-    # --- SEARCH FIELDS ---
-    search_fields = ('wbc', 'primary_int', 'rationale', 'clinical_guidance')
-
-    # --- LIST DISPLAY ---
-    list_display = (
-        'wbc', 'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils',
-        'primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary',
-        'risk_score', 'risk_level', 'confidence',
-        'risk_definition_click',
-        'other_considerations',
-        'rationale_click',
-        'clinical_guidance_click'
-    )
-
-    list_display_links = ('wbc', 'neutrophils', 'lymphocytes',
-                          'monocytes', 'eosinophils', 'basophils')
-
-    # --- 1. DISABLE ADD PERMISSION ---
-    def has_add_permission(self, request):
-        return False
-
-    # --- 2. MAKE FIELDS READ-ONLY ---
-    readonly_fields = (
-        'wbc', 'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils',
-        'risk_score', 'risk_level', 'confidence'
-    )
-
-    # --- FIELDSETS ---
-    fieldsets = (
-        ('Marker Patterns (Read Only)', {
-            'description': "These patterns identify the row and cannot be changed.",
-            'fields': (
-                ('wbc', 'neutrophils'),
-                ('lymphocytes', 'monocytes'),
-                ('eosinophils', 'basophils')
-            )
-        }),
-        ('Interpretation Hierarchy', {
-            'description': "Select terms from the WBC Glossary.",
-            'fields': (
-                'primary_int',
-                ('secondary', 'tertiary'),
-                ('quaternary', 'quinary')
-            ),
-            'classes': ('wide',)
-        }),
-        ('Risk & Analysis', {
-            'fields': (
-                ('risk_score', 'risk_level'),  # Now Read-only
-                'confidence',                 # Now Read-only
-                'risk_definition',
-                'other_considerations',
-                'rationale',
-                'clinical_guidance'
-            )
-        }),
-    )
-
-    list_filter = ('risk_level', 'confidence', 'wbc')
-    list_per_page = 50
-
-    # --- CLICK TO OPEN HELPERS ---
-    def _create_click_to_open(self, text, width="300px"):
-        if not text:
-            return "-"
-
-        style_str = f"min-width: {width}; white-space: normal;"
-
-        if len(text) <= 50:
-            return format_html(f'<div style="{style_str}">{text}</div>')
-
-        short_text = text[:50] + "..."
-
-        return format_html(
-            f'<div class="text-toggle-container" style="{style_str}">'
-            '<div style="cursor:pointer; display:block;" '
-            'onclick="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">'
-            '<span>{}</span> <span style="color:#447e9b; font-weight:bold;"> &#9662;</span></div>'
-            '<div style="cursor:pointer; display:none;" '
-            'onclick="this.style.display=\'none\'; this.previousElementSibling.style.display=\'block\';">'
-            '<span>{}</span> <span style="color:#447e9b; font-weight:bold;"> &#9652;</span></div>'
-            '</div>',
-            short_text, text
-        )
-
-    def rationale_click(self, obj):
-        return self._create_click_to_open(obj.rationale, width="200px")
-    rationale_click.short_description = "Rationale"
-
-    def clinical_guidance_click(self, obj):
-        return self._create_click_to_open(obj.clinical_guidance, width="200px")
-    clinical_guidance_click.short_description = "Clinical Guidance"
-
-    def risk_definition_click(self, obj):
-        return self._create_click_to_open(obj.risk_definition, width="200px")
-    risk_definition_click.short_description = "Risk Definition"
-
-    # --- UPDATED CSS FOR COMPACT UI ---
-    class Media:
-        js = SHARED_MEDIA['js']
-        # css = {
-        #     'all': ('admin/css/admin_enhanced.css',)
-        # }
-        # Generalized CSS to fix ALL rows (WBC, Risk Score, Confidence, etc.)
-        extra = '''
-            <style>
-                /* 1. Reset the Row Layout */
-                /* Force items to align to the left */
-                .form-group .row {
-                    display: flex !important;
-                    justify-content: flex-start !important;
-                }
-
-                /* 2. Shrink Labels (e.g. "WBC", "Risk Score") */
-                /* Override the theme's 'col-sm-3' which forces 25% width */
-                .form-group .row label.col-sm-3 {
-                    flex: 0 0 auto !important;
-                    width: auto !important;
-                    max-width: none !important;
-                    margin-right: 10px !important;  /* Tiny gap between Label and Value */
-                    padding-right: 0 !important;
-                }
-
-                /* 3. Shrink Value Wrappers (e.g. "High", "5") */
-                .form-group .row .fieldBox {
-                    flex: 0 0 auto !important;
-                    width: auto !important;
-                    padding-left: 0 !important;
-                    margin-right: 50px !important; /* Gap before the NEXT label starts */
-                }
-
-                /* 4. Fix alignment for the second label in the row (e.g. "Neutrophils") */
-                .form-group .row label.col-auto {
-                    padding-left: 0 !important;
-                    margin-right: 10px !important;
-                }
-            </style>
-        '''
-
-# ==============================================================================
 # 6. MEDICATIONS & SUPPLEMENTS (Search: Type | Select: Marker)
 # ==============================================================================
 
@@ -2419,28 +2191,6 @@ class MappingAdminFormBase(forms.ModelForm):
         choices = [('', 'Select Blood Marker...')] + [(m, m)
                                                       for m in markers if m]
         self.fields['marker'].choices = choices
-
-# class MappingAdminFormBase(forms.ModelForm):
-#     # Change to DynamicChoiceField
-#     marker = DynamicChoiceField(
-#         required=False, label="Target Blood Marker", widget=forms.Select(attrs=WIDGET_ATTRS))
-
-#     @property
-#     def media(self): return forms.Media(**SHARED_MEDIA)
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         markers = list(Analysis.objects.values_list(
-#             'blood_test', flat=True).distinct().order_by('blood_test'))
-
-#         # Protect existing value if not in list
-#         instance = getattr(self, 'instance', None)
-#         if instance and instance.marker and instance.marker not in markers:
-#             markers.append(instance.marker)
-
-#         choices = [('', 'Select Blood Marker...')] + [(m, m)
-#                                                       for m in markers if m]
-#         self.fields['marker'].choices = choices
 
 
 class MedicationMappingAdminForm(MappingAdminFormBase):
@@ -2507,14 +2257,16 @@ class MedicationMappingAdminForm(MappingAdminFormBase):
 @admin.register(MedicationListProxy)
 class MedicationListAdmin(RemindUpdateMixin, admin.ModelAdmin):
     # --- REQUIREMENT C MAPPING: Med List -> Med Mapping ---
-    validation_map = [
-        (
-            ['example_medications'],
-            'admin:ui_pharma_medicationmappingproxy_changelist',
-            'Medications Mapping Page',
-            "You added/edited a Medication Name. Please update the Mapping table if this is a new type."
-        )
-    ]
+    universal_reminders = [
+        ('admin:ui_pharma_medicationmappingproxy_changelist', 'Medications Mapping Page')]
+    # validation_map = [
+    #     (
+    #         ['example_medications'],
+    #         'admin:ui_pharma_medicationmappingproxy_changelist',
+    #         'Medications Mapping Page',
+    #         "You added/edited a Medication Name. Please update the Mapping table if this is a new type."
+    #     )
+    # ]
     related_pages = [
         ('admin:ui_pharma_medicationmappingproxy_changelist', 'Medications Mapping Page')
     ]
@@ -2650,26 +2402,19 @@ class MedicationScoreDefAdmin(admin.ModelAdmin):
     ordering = ('score',)
 
 
-@admin.register(SupplementScoreDefProxy)
-class SupplementScoreDefAdmin(admin.ModelAdmin):
-    form = ScoreDefAdminForm
-    list_display = ('score', 'definition')
-    list_display_links = ('score',)
-    search_fields = ('score', 'definition')
-    ordering = ('score',)
-
-
 @admin.register(SupplementListProxy)
 class SupplementsListAdmin(RemindUpdateMixin, admin.ModelAdmin):
     # --- REQUIREMENT C MAPPING: Supp List -> Supp Mapping ---
-    validation_map = [
-        (
-            ['example_supplements'],
-            'admin:ui_pharma_supplementmappingproxy_changelist',
-            'Supplements Mapping Page',
-            "You added/edited a Supplement Name. Please update the Mapping table if this is a new type."
-        )
-    ]
+    universal_reminders = [
+        ('admin:ui_pharma_supplementmappingproxy_changelist', 'Supplements Mapping Page')]
+    # validation_map = [
+    #     (
+    #         ['example_supplements'],
+    #         'admin:ui_pharma_supplementmappingproxy_changelist',
+    #         'Supplements Mapping Page',
+    #         "You added/edited a Supplement Name. Please update the Mapping table if this is a new type."
+    #     )
+    # ]
     related_pages = [
         ('admin:ui_pharma_supplementmappingproxy_changelist', 'Supplements Mapping Page')
     ]
@@ -2873,9 +2618,242 @@ class SupplementsMappingAdmin(RemindUpdateMixin, admin.ModelAdmin):
     interp_note_high_click.short_description = "Interpretation Note ↑"
 
 
+@admin.register(SupplementScoreDefProxy)
+class SupplementScoreDefAdmin(admin.ModelAdmin):
+    form = ScoreDefAdminForm
+    list_display = ('score', 'definition')
+    list_display_links = ('score',)
+    search_fields = ('score', 'definition')
+    ordering = ('score',)
+
+
+# ==============================================================================
+# 5. WBC GLOSSARY & MATRIX (Search Enabled)
+# ==============================================================================
+
+
+@admin.register(WBCGlossaryProxy)
+class WBCGlossaryAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: WBC Glossary -> WBC Matrix ---
+    universal_reminders = [
+        ('admin:ui_wbc_wbcmatrixproxy_changelist', 'WBC Matrix Page')]
+    related_pages = [
+        ('admin:ui_wbc_wbcmatrixproxy_changelist', 'WBC Matrix Page')
+    ]
+    # --- ADDED SEARCH FIELDS ---
+    search_fields = ('term', 'definition', 'next_steps')
+
+    # --- EXISTING STRUCTURE PRESERVED ---
+    list_display = ('term', 'definition', 'next_steps')
+    fields = ('term', 'definition', 'next_steps')
+    list_filter = ('term',)
+    list_display_links = ('term',)
+    list_per_page = 50
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
+
+
+class WBCMatrixAdminForm(forms.ModelForm):
+    # Change ALL to DynamicChoiceField
+    primary_int = DynamicChoiceField(
+        required=False, label="Primary Interpretation", widget=forms.Select(attrs=WIDGET_ATTRS))
+    secondary = DynamicChoiceField(
+        required=False, label="Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
+    tertiary = DynamicChoiceField(
+        required=False, label="Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
+    quaternary = DynamicChoiceField(
+        required=False, label="Quaternary", widget=forms.Select(attrs=WIDGET_ATTRS))
+    quinary = DynamicChoiceField(
+        required=False, label="Quinary", widget=forms.Select(attrs=WIDGET_ATTRS))
+
+    class Meta:
+        model = WBCMatrix
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        terms = list(WBCGlossary.objects.values_list(
+            'term', flat=True).distinct().order_by('term'))
+        term_choices = [('', 'Select Term...')] + [(t, t) for t in terms if t]
+
+        self.fields['primary_int'].choices = term_choices
+        self.fields['secondary'].choices = term_choices
+        self.fields['tertiary'].choices = term_choices
+        self.fields['quaternary'].choices = term_choices
+        self.fields['quinary'].choices = term_choices
+
+        # Check existing values and add them if missing
+        instance = getattr(self, 'instance', None)
+        if instance and instance.pk:
+            for field in ['primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary']:
+                val = getattr(instance, field)
+                if val and val not in terms:
+                    self.fields[field].choices.append((val, val))
+
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
+
+
+@admin.register(WBCMatrixProxy)
+class WBCMatrixAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    form = WBCMatrixAdminForm
+    validation_map = [
+        # Check: WBC Glossary Terms
+        (
+            ['primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary'],
+            WBCGlossary,                 # Target Model
+            'term',                      # Target Column
+            'admin:ui_wbc_wbcglossaryproxy_changelist',
+            'WBC Glossary',
+            "You used a Term that is not defined in the WBC Glossary."
+        )
+    ]
+
+    # --- SEARCH FIELDS ---
+    search_fields = ('wbc', 'primary_int', 'rationale', 'clinical_guidance')
+
+    # --- LIST DISPLAY ---
+    list_display = (
+        'wbc', 'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils',
+        'primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary',
+        'risk_score', 'risk_level', 'confidence',
+        'risk_definition_click',
+        'other_considerations',
+        'rationale_click',
+        'clinical_guidance_click'
+    )
+
+    list_display_links = ('wbc', 'neutrophils', 'lymphocytes',
+                          'monocytes', 'eosinophils', 'basophils')
+
+    # --- 1. DISABLE ADD PERMISSION ---
+    def has_add_permission(self, request):
+        return False
+
+    # --- 2. MAKE FIELDS READ-ONLY ---
+    readonly_fields = (
+        'wbc', 'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils',
+        'risk_score', 'risk_level', 'confidence'
+    )
+
+    # --- FIELDSETS ---
+    fieldsets = (
+        ('Marker Patterns (Read Only)', {
+            'description': "These patterns identify the row and cannot be changed.",
+            'fields': (
+                ('wbc', 'neutrophils'),
+                ('lymphocytes', 'monocytes'),
+                ('eosinophils', 'basophils')
+            )
+        }),
+        ('Interpretation Hierarchy', {
+            'description': "Select terms from the WBC Glossary.",
+            'fields': (
+                'primary_int',
+                ('secondary', 'tertiary'),
+                ('quaternary', 'quinary')
+            ),
+            'classes': ('wide',)
+        }),
+        ('Risk & Analysis', {
+            'fields': (
+                ('risk_score', 'risk_level'),  # Now Read-only
+                'confidence',                 # Now Read-only
+                'risk_definition',
+                'other_considerations',
+                'rationale',
+                'clinical_guidance'
+            )
+        }),
+    )
+
+    list_filter = ('risk_level', 'confidence', 'wbc')
+    list_per_page = 50
+
+    # --- CLICK TO OPEN HELPERS ---
+    def _create_click_to_open(self, text, width="300px"):
+        if not text:
+            return "-"
+
+        style_str = f"min-width: {width}; white-space: normal;"
+
+        if len(text) <= 50:
+            return format_html(f'<div style="{style_str}">{text}</div>')
+
+        short_text = text[:50] + "..."
+
+        return format_html(
+            f'<div class="text-toggle-container" style="{style_str}">'
+            '<div style="cursor:pointer; display:block;" '
+            'onclick="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">'
+            '<span>{}</span> <span style="color:#447e9b; font-weight:bold;"> &#9662;</span></div>'
+            '<div style="cursor:pointer; display:none;" '
+            'onclick="this.style.display=\'none\'; this.previousElementSibling.style.display=\'block\';">'
+            '<span>{}</span> <span style="color:#447e9b; font-weight:bold;"> &#9652;</span></div>'
+            '</div>',
+            short_text, text
+        )
+
+    def rationale_click(self, obj):
+        return self._create_click_to_open(obj.rationale, width="200px")
+    rationale_click.short_description = "Rationale"
+
+    def clinical_guidance_click(self, obj):
+        return self._create_click_to_open(obj.clinical_guidance, width="200px")
+    clinical_guidance_click.short_description = "Clinical Guidance"
+
+    def risk_definition_click(self, obj):
+        return self._create_click_to_open(obj.risk_definition, width="200px")
+    risk_definition_click.short_description = "Risk Definition"
+
+    # --- UPDATED CSS FOR COMPACT UI ---
+    class Media:
+        js = SHARED_MEDIA['js']
+        # css = {
+        #     'all': ('admin/css/admin_enhanced.css',)
+        # }
+        # Generalized CSS to fix ALL rows (WBC, Risk Score, Confidence, etc.)
+        extra = '''
+            <style>
+                /* 1. Reset the Row Layout */
+                /* Force items to align to the left */
+                .form-group .row {
+                    display: flex !important;
+                    justify-content: flex-start !important;
+                }
+
+                /* 2. Shrink Labels (e.g. "WBC", "Risk Score") */
+                /* Override the theme's 'col-sm-3' which forces 25% width */
+                .form-group .row label.col-sm-3 {
+                    flex: 0 0 auto !important;
+                    width: auto !important;
+                    max-width: none !important;
+                    margin-right: 10px !important;  /* Tiny gap between Label and Value */
+                    padding-right: 0 !important;
+                }
+
+                /* 3. Shrink Value Wrappers (e.g. "High", "5") */
+                .form-group .row .fieldBox {
+                    flex: 0 0 auto !important;
+                    width: auto !important;
+                    padding-left: 0 !important;
+                    margin-right: 50px !important; /* Gap before the NEXT label starts */
+                }
+
+                /* 4. Fix alignment for the second label in the row (e.g. "Neutrophils") */
+                .form-group .row label.col-auto {
+                    padding-left: 0 !important;
+                    margin-right: 10px !important;
+                }
+            </style>
+        '''
+
 # ==============================================================================
 # 7. LIFESTYLE & TCM DEFINITIONS (Search Enabled)
 # ==============================================================================
+
+
 @admin.register(LifestyleQuestionnaireProxy)
 class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
     # --- ADDED SEARCH FIELDS ---
@@ -2892,49 +2870,5 @@ class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
     )
     list_display_links = ('question_number', 'question')
     list_filter = ('question_number',)
-    @property
-    def media(self): return forms.Media(**SHARED_MEDIA)
-
-
-# @admin.register(TCMBodyTypeMapping)
-@admin.register(TCMBodyTypeProxy)
-class TCMBodyTypeMappingAdmin(RemindUpdateMixin, admin.ModelAdmin):
-    # --- REQUIREMENT C MAPPING: Body Type -> TCM Patterns ---
-    related_pages = [
-        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')
-    ]
-    # --- ADDED SEARCH FIELDS ---
-    search_fields = ('tcm_body_type', 'tcm_explanation',
-                     'func_equivalent', 'func_explanation')
-    list_filter = ('tcm_body_type',)
-
-    # --- EXISTING STRUCTURE PRESERVED ---
-    list_display = (
-        'tcm_body_type', 'tcm_explanation',
-        'func_equivalent', 'func_explanation'
-    )
-    fields = (
-        'tcm_body_type', 'tcm_explanation',
-        'func_equivalent', 'func_explanation'
-    )
-    @property
-    def media(self): return forms.Media(**SHARED_MEDIA)
-    list_display_links = ('tcm_body_type',)
-    list_per_page = 50
-
-
-@admin.register(TCMPathogenProxy)
-# @admin.register(TCMPathogenDefinition)
-class TCMPathogenDefinitionAdmin(RemindUpdateMixin, admin.ModelAdmin):
-    # --- REQUIREMENT C MAPPING: Pathogens -> TCM Patterns ---
-    related_pages = [
-        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')
-    ]
-    # --- ADDED SEARCH FIELDS ---
-    search_fields = ('pathogen', 'definition')
-    list_filter = ('pathogen',)
-
-    # --- EXISTING STRUCTURE PRESERVED ---
-    list_display = ('pathogen', 'definition')
     @property
     def media(self): return forms.Media(**SHARED_MEDIA)
