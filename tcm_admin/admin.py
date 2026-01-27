@@ -1902,26 +1902,119 @@ class FunctionalCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
     def media(self): return forms.Media(**SHARED_MEDIA)
 
 
+# class SymptomCategoryAdminForm(forms.ModelForm):
+#     # 1. Symptoms: Allow typing (Source: Pattern model)
+#     # symptoms = DynamicChoiceField(
+#     #     required=False,
+#     #     label="Symptom (from Patterns)",
+#     #     widget=forms.Select(attrs=WIDGET_ATTRS)
+#     # )
+
+#     # 2. Primary Category: Allow typing
+#     primary_category = DynamicChoiceField(
+#         required=False,
+#         label="Primary Category",
+#         widget=forms.Select(attrs=WIDGET_ATTRS)
+#     )
+
+#     # 3. Secondary Category: Allow typing (NEW)
+#     secondary_category = DynamicChoiceField(
+#         required=False,
+#         label="Secondary Category",
+#         widget=forms.Select(attrs=WIDGET_ATTRS)
+#     )
+
+#     class Meta:
+#         model = SymptomCategory
+#         fields = '__all__'
+
+#     @property
+#     def media(self):
+#         return forms.Media(**SHARED_MEDIA)
+
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#         # --- A. SYMPTOMS (From Pattern) ---
+#         raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
+#         unique_symptoms = set()
+#         for entry in raw_pattern_data:
+#             if entry:
+#                 # Split by semicolon to get individual symptoms
+#                 parts = [x.strip() for x in entry.split(';') if x.strip()]
+#                 unique_symptoms.update(parts)
+
+#         sorted_symptoms = sorted(list(unique_symptoms))
+#         symptom_choices = [('', 'Select Symptom...')] + [(s, s)
+#                                                          for s in sorted_symptoms]
+#         self.fields['symptoms'].choices = symptom_choices
+
+#         # --- B. CATEGORIES (From FunctionalCategory) ---
+#         cats = list(FunctionalCategory.objects.values_list(
+#             'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
+
+#         cat_choices = [('', 'Select Category...')] + [(c, c)
+#                                                       for c in cats if c]
+
+#         # Apply choices to BOTH Primary and Secondary
+#         self.fields['primary_category'].choices = cat_choices
+#         self.fields['secondary_category'].choices = cat_choices
+
+#         # --- C. PRESERVE DATA (If current value is custom) ---
+#         instance = getattr(self, 'instance', None)
+#         if instance and instance.pk:
+#             # Preserve Symptom
+#             current_sym = instance.symptoms
+#             if current_sym and current_sym not in unique_symptoms:
+#                 self.fields['symptoms'].choices.append(
+#                     (current_sym, current_sym))
+
+#             # Preserve Primary Category
+#             current_cat = instance.primary_category
+#             if current_cat and current_cat not in cats:
+#                 self.fields['primary_category'].choices.append(
+#                     (current_cat, current_cat))
+
+#             # Preserve Secondary Category
+#             current_sec = instance.secondary_category
+#             if current_sec and current_sec not in cats:
+#                 self.fields['secondary_category'].choices.append(
+#                     (current_sec, current_sec))
+
 class SymptomCategoryAdminForm(forms.ModelForm):
-    # 1. Symptoms: Allow typing (Source: Pattern model)
-    symptoms = DynamicChoiceField(
-        required=False,
-        label="Symptom (from Patterns)",
-        widget=forms.Select(attrs=WIDGET_ATTRS)
+    # 1. UPDATED: Symptoms is now a simple Text Input (Not a selector)
+    symptoms = forms.CharField(
+        required=True,
+        label="Symptom",
+        widget=forms.TextInput(attrs={
+            'style': 'width: 100%;',
+            'class': 'vTextField',
+            'placeholder': 'Type new symptom name...'
+        })
     )
 
-    # 2. Primary Category: Allow typing
+    # 2. Primary Category: Selector (Populated from DB)
     primary_category = DynamicChoiceField(
         required=False,
         label="Primary Category",
-        widget=forms.Select(attrs=WIDGET_ATTRS)
+        widget=forms.Select(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true',  # Allows adding a NEW category if needed
+            'data-placeholder': 'Select Category...'
+        })
     )
 
-    # 3. Secondary Category: Allow typing (NEW)
+    # 3. Secondary Category: Selector (Populated from DB)
     secondary_category = DynamicChoiceField(
         required=False,
         label="Secondary Category",
-        widget=forms.Select(attrs=WIDGET_ATTRS)
+        widget=forms.Select(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true',
+            'data-placeholder': 'Select Category...'
+        })
     )
 
     class Meta:
@@ -1935,51 +2028,33 @@ class SymptomCategoryAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # --- A. SYMPTOMS (From Pattern) ---
-        raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
-        unique_symptoms = set()
-        for entry in raw_pattern_data:
-            if entry:
-                # Split by semicolon to get individual symptoms
-                parts = [x.strip() for x in entry.split(';') if x.strip()]
-                unique_symptoms.update(parts)
+        # --- POPULATE CATEGORIES (From SymptomCategory table only) ---
+        # 1. Fetch values from both columns
+        p_cats = list(SymptomCategory.objects.values_list(
+            'primary_category', flat=True))
+        s_cats = list(SymptomCategory.objects.values_list(
+            'secondary_category', flat=True))
 
-        sorted_symptoms = sorted(list(unique_symptoms))
-        symptom_choices = [('', 'Select Symptom...')] + [(s, s)
-                                                         for s in sorted_symptoms]
-        self.fields['symptoms'].choices = symptom_choices
+        # 2. Combine and sort
+        all_existing_cats = set(p_cats + s_cats)
+        cat_choices = [('', '')] + sorted([(c, c)
+                                           for c in all_existing_cats if c])
 
-        # --- B. CATEGORIES (From FunctionalCategory) ---
-        cats = list(FunctionalCategory.objects.values_list(
-            'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
-
-        cat_choices = [('', 'Select Category...')] + [(c, c)
-                                                      for c in cats if c]
-
-        # Apply choices to BOTH Primary and Secondary
+        # 3. Assign to widgets
         self.fields['primary_category'].choices = cat_choices
         self.fields['secondary_category'].choices = cat_choices
 
-        # --- C. PRESERVE DATA (If current value is custom) ---
+        # --- PRESERVE CUSTOM DATA ---
         instance = getattr(self, 'instance', None)
         if instance and instance.pk:
-            # Preserve Symptom
-            current_sym = instance.symptoms
-            if current_sym and current_sym not in unique_symptoms:
-                self.fields['symptoms'].choices.append(
-                    (current_sym, current_sym))
-
-            # Preserve Primary Category
-            current_cat = instance.primary_category
-            if current_cat and current_cat not in cats:
+            # If the saved category isn't in the list yet, add it so it displays correctly
+            if instance.primary_category and instance.primary_category not in all_existing_cats:
                 self.fields['primary_category'].choices.append(
-                    (current_cat, current_cat))
+                    (instance.primary_category, instance.primary_category))
 
-            # Preserve Secondary Category
-            current_sec = instance.secondary_category
-            if current_sec and current_sec not in cats:
+            if instance.secondary_category and instance.secondary_category not in all_existing_cats:
                 self.fields['secondary_category'].choices.append(
-                    (current_sec, current_sec))
+                    (instance.secondary_category, instance.secondary_category))
 
 
 @admin.register(SymptomCategoryProxy)
@@ -1990,19 +2065,19 @@ class SymptomCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
 # --- SMART VALIDATION MAPPING ---
     universal_reminders = [
         ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')]
-    validation_map = [
-        # 1. CHECK SYMPTOMS (Against TCM Patterns)
-        (
-            ['symptoms'],
-            Pattern,                     # Target Model
-            'symptoms',                  # Target Column ("Headache; Fever")
-            'admin:ui_core_patternproxy_changelist',
-            'TCM Patterns Page',
-            "This symptom does not appear in any TCM Pattern yet.",
-            ';'                          # <--- DELIMITER (Splits DB string)
-        ),
+    # validation_map = [
+    #     # 1. CHECK SYMPTOMS (Against TCM Patterns)
+    #     (
+    #         ['symptoms'],
+    #         Pattern,                     # Target Model
+    #         'symptoms',                  # Target Column ("Headache; Fever")
+    #         'admin:ui_core_patternproxy_changelist',
+    #         'TCM Patterns Page',
+    #         "This symptom does not appear in any TCM Pattern yet.",
+    #         ';'                          # <--- DELIMITER (Splits DB string)
+    #     ),
 
-    ]
+    # ]
 
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('symptoms', 'primary_category', 'secondary_category')
