@@ -95,7 +95,7 @@ class Analysis(models.Model):
     class Meta:
         managed = True  # <--- CHANGED: Allows you to add/edit rows
         db_table = 'analysis'
-        verbose_name = "Blood Marker"
+        verbose_name = "Blood Markers"
 
     def __str__(self):
         return self.blood_test
@@ -145,16 +145,6 @@ class Pattern(models.Model):
     body_type_tertiary = models.CharField(
         max_length=255, db_column='TCM Body Type - Tertiary', verbose_name="TCM Body Type - Tertiary", blank=True, null=True)
 
-    # 14-15. Impacts
-    # positive_impacts = models.TextField(db_column='Medication/Suppliments - Positive Impacts',
-    #                                     verbose_name="Medication/Suppliments - Positive Impacts", blank=True, null=True)
-    # negative_impacts = models.TextField(db_column='Medication/Suppliments - Negative Impacts',
-    #                                     verbose_name="Medication/Suppliments - Negative Impacts", blank=True, null=True)
-
-    # # 16. Rationale
-    # rationale = models.TextField(
-    #     db_column='Rationale', verbose_name="Rationale", blank=True, null=True)
-
     # 17. Pathogenci factor (Original DB spelling)
     pathogenic_factor = models.CharField(
         max_length=255, db_column='Pathogenci factor', verbose_name="Pathogenci factor", blank=True, null=True)
@@ -162,8 +152,8 @@ class Pattern(models.Model):
     class Meta:
         managed = False
         db_table = 'patterns'
-        verbose_name = "Patterns Definition"
-        verbose_name_plural = "Patterns Definitions"
+        verbose_name = "TCM Patterns"
+        verbose_name_plural = "TCM Patterns"
 
     def __str__(self):
         return self.tcm_patterns
@@ -881,3 +871,146 @@ class TCMPathogenDefinition(models.Model):
 
     def __str__(self):
         return self.pathogen
+
+# ==============================================================================
+# PROXY MODELS FOR ADMIN GROUPING (NEW CODE)
+# These models map the real tables to the "Virtual Apps" for Sidebar Grouping
+# ==============================================================================
+
+# --- GROUP 1: Core Blood Markers & Pattern Mapping ---
+
+
+class BloodMarkersProxy(Analysis):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "Blood Marker"
+        verbose_name_plural = "Blood Markers"
+
+
+class PatternProxy(Pattern):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "TCM Pattern"
+        verbose_name_plural = "TCM Patterns"
+
+
+class TCMBodyTypeProxy(TCMBodyTypeMapping):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "TCM Body Type Mapping"
+        verbose_name_plural = "TCM Body Type Mapping"
+
+
+class TCMPathogenProxy(TCMPathogenDefinition):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "TCM Pathogen Definition"
+        verbose_name_plural = "TCM Pathogen Definitions"
+
+
+class FunctionalCategoryProxy(FunctionalCategory):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "Functional Medicine Indication"
+        verbose_name_plural = "Functional Medicine Indications"
+
+
+# --- GROUP 2: Medical Conditions & Symptoms ---
+
+class SymptomCategoryProxy(SymptomCategory):
+    class Meta:
+        proxy = True
+        app_label = 'ui_medical'
+        verbose_name = "Symptoms Category Mapping"
+        verbose_name_plural = "Symptoms Category Mapping"
+
+
+class MedicalConditionProxy(MedicalCondition):
+    class Meta:
+        proxy = True
+        app_label = 'ui_medical'
+        verbose_name = "Medical Conditions Mapping"
+        verbose_name_plural = "Medical Conditions Mapping"
+
+
+# --- GROUP 3: Medications & Supplements ---
+
+class MedicationListProxy(MedicationList):
+    class Meta:
+        proxy = True
+        app_label = 'ui_pharma'
+        verbose_name = "Medications List"
+        verbose_name_plural = "Medications List"
+
+
+class MedicationMappingProxy(MedicationMapping):
+    class Meta:
+        proxy = True
+        app_label = 'ui_pharma'
+        verbose_name = "Medications Mapping"
+        verbose_name_plural = "Medications Mapping"
+
+
+class MedicationScoreDefProxy(MedicationScoreDef):
+    class Meta:
+        proxy = True
+        app_label = 'ui_pharma'
+        verbose_name = "Medications Score Definition"
+        verbose_name_plural = "Medications Score Definitions"
+
+
+class SupplementListProxy(SupplementList):
+    class Meta:
+        proxy = True
+        app_label = 'ui_pharma'
+        verbose_name = "Supplements List"
+        verbose_name_plural = "Supplements List"
+
+
+class SupplementMappingProxy(SupplementMapping):
+    class Meta:
+        proxy = True
+        app_label = 'ui_pharma'
+        verbose_name = "Supplements Mapping"
+        verbose_name_plural = "Supplements Mapping"
+
+
+class SupplementScoreDefProxy(SupplementScoreDef):
+    class Meta:
+        proxy = True
+        app_label = 'ui_pharma'
+        verbose_name = "Supplement Score Definition"
+        verbose_name_plural = "Supplement Score Definitions"
+
+
+# --- GROUP 4: White Blood Cells Mapping ---
+
+class WBCGlossaryProxy(WBCGlossary):
+    class Meta:
+        proxy = True
+        app_label = 'ui_wbc'
+        verbose_name = "WBC Glossary"
+        verbose_name_plural = "WBC Glossary"
+
+
+class WBCMatrixProxy(WBCMatrix):
+    class Meta:
+        proxy = True
+        app_label = 'ui_wbc'
+        verbose_name = "WBC Matrix"
+        verbose_name_plural = "WBC Matrix"
+
+
+# --- GROUP 5: Lifestyle ---
+
+class LifestyleQuestionnaireProxy(LifestyleQuestionnaire):
+    class Meta:
+        proxy = True
+        app_label = 'ui_lifestyle'
+        verbose_name = "Lifestyle & Dietary Questionnaire"
+        verbose_name_plural = "Lifestyle & Dietary Questionnaire"

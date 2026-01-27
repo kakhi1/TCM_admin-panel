@@ -5,3 +5,4 @@ dj-database-url     # To parse the database URL provided by Seenode
 whitenoise          # To serve Admin Panel CSS/Static files
 python-dotenv
 django-jazzmin
+django-modeladmin-reorder

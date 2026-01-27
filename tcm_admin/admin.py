@@ -1,3 +1,5 @@
+
+from django.http import HttpResponse
 from django.utils.html import escape
 from django.utils.html import escape  # Import this
 from .models import Pattern
@@ -5,9 +7,17 @@ from django.utils.html import format_html
 from django.forms.widgets import Widget
 from django.utils.safestring import mark_safe
 import json
-from django.contrib import admin
+from django.urls import reverse
+from django.contrib import admin, messages
 from django import forms
 from .models import (
+    # Import the Proxies
+    BloodMarkersProxy, PatternProxy, TCMBodyTypeProxy, TCMPathogenProxy, FunctionalCategoryProxy,
+    SymptomCategoryProxy, MedicalConditionProxy,
+    MedicationListProxy, MedicationMappingProxy, MedicationScoreDefProxy,
+    SupplementListProxy, SupplementMappingProxy, SupplementScoreDefProxy,
+    WBCGlossaryProxy, WBCMatrixProxy,
+    LifestyleQuestionnaireProxy,
     Analysis, Pattern, FunctionalCategory, SymptomCategory,
     MedicalCondition, WBCGlossary, WBCMatrix, MedicationList,
     MedicationMapping, MedicationScoreDef, SupplementList,
@@ -16,7 +26,21 @@ from .models import (
 )
 
 # --- GLOBAL CONFIGURATION & ASSETS ---
-# Common media config to ensure Select2 loads for all search-enabled forms
+# # Common media config to ensure Select2 loads for all search-enabled forms
+# SHARED_MEDIA = {
+#     'css': {
+#         'all': (
+#             'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css',
+#             'admin/css/admin_enhanced.css',
+#         )
+#     },
+#     'js': (
+#         'https://code.jquery.com/jquery-3.6.0.min.js',
+#         'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js',
+#         'admin/js/admin_select2_setup.js',
+
+#     )
+# }
 SHARED_MEDIA = {
     'css': {
         'all': (
@@ -25,13 +49,19 @@ SHARED_MEDIA = {
         )
     },
     'js': (
+        # 1. LOAD JQUERY FIRST (Critical)
         'https://code.jquery.com/jquery-3.6.0.min.js',
+
+        # 2. LOAD SELECT2 (Depends on jQuery)
         'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js',
+
+        # 3. YOUR SETUP SCRIPT (Must run last)
         'admin/js/admin_select2_setup.js',
 
+        # 4. Unsaved Changes Warning
+        'admin/js/unsaved_changes.js',
     )
 }
-
 
 WIDGET_ATTRS = {
     'class': 'advanced-select',
@@ -40,6 +70,20 @@ WIDGET_ATTRS = {
 
 # --- HELPER FUNCTIONS FOR TEXT-BASED RELATIONS ---
 # --- NEW HELPER FUNCTIONS & CUSTOM FIELD ---
+# --- ADD THIS CLASS NEXT TO DynamicMultipleChoiceField ---
+
+
+class DynamicChoiceField(forms.ChoiceField):
+    """
+    Allows valid choices OR new custom text values.
+    Renders as a Select, but validates like a CharField.
+    """
+
+    def validate(self, value):
+        # Skip the standard ChoiceField validation that forces value to be in self.choices
+        if self.required and not value:
+            raise forms.ValidationError(
+                self.error_messages['required'], code='required')
 
 
 def list_to_oxford_string(cleaned_data_list):
@@ -105,6 +149,11 @@ class ScoreDefAdminForm(forms.ModelForm):
 
     class Meta:
         fields = '__all__'
+    # --- ADD THIS PROPERTY ---
+
+    @property
+    def media(self):
+        return forms.Media(**SHARED_MEDIA)
 
 
 def list_to_semicolon_string(cleaned_data_list):
@@ -125,744 +174,6 @@ def get_initial_list(db_string, master_list):
             master_list.append(item)
     return items
 
-
-# class PairedSemicolonWidget(Widget):
-#     """
-#     A custom widget that renders a list of (Name + Magnitude) pairs.
-#     Now supports a custom header label (e.g., 'Medication Type' vs 'Supplement Type').
-#     """
-#     template_name = 'django/forms/widgets/textarea.html'
-
-#     # 1. Update __init__ to accept a label_text argument (Default is "Medication Type")
-#     def __init__(self, magnitude_field_name, label_text="Medication Type", *args, **kwargs):
-#         self.magnitude_field_name = magnitude_field_name
-#         self.label_text = label_text  # Store the label
-#         super().__init__(*args, **kwargs)
-
-#     def render(self, name, value, attrs=None, renderer=None):
-#         main_id = attrs.get('id', name)
-#         mag_id = main_id.replace(name, self.magnitude_field_name)
-#         current_types = value if value is not None else ''
-
-#         # 2. Use self.label_text in the HTML string instead of hardcoded text
-#         html = f"""
-#         <div id="wrapper_{main_id}" class="paired-widget-wrapper"
-#              data-main-id="{main_id}" data-mag-id="{mag_id}"
-#              style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9;">
-
-#             <table class="paired-table" style="width: 100%; text-align: left;">
-#                 <thead>
-#                     <tr>
-#                         <th style="width: 70%">{self.label_text}</th>  <th style="width: 20%">Magnitude (1-3)</th>
-#                         <th style="width: 10%">Action</th>
-#                     </tr>
-#                 </thead>
-#                 <tbody id="tbody_{main_id}">
-#                     </tbody>
-#             </table>
-
-#             <div style="margin-top: 10px;">
-#                 <button type="button" id="btn_add_{main_id}" class="button" style="font-weight: bold;">+ Add Row</button>
-#             </div>
-
-#             <input type="hidden" name="{name}" id="{main_id}" value="{current_types}">
-#         </div>
-
-#         <script>
-#         // ... (Keep the rest of the script exactly the same as before) ...
-#         (function($) {{
-#             $(document).ready(function() {{
-#                 var wrapper = $('#wrapper_{main_id}');
-#                 var typesInput = $('#{main_id}');
-#                 var magsInput = $('#{mag_id}');
-#                 var tbody = $('#tbody_{main_id}');
-#                 var addBtn = $('#btn_add_{main_id}');
-
-#                 magsInput.closest('.form-row').hide();
-#                 if(magsInput.closest('.form-row').length === 0) {{
-#                     magsInput.attr('type', 'hidden');
-#                     $('label[for="{mag_id}"]').hide();
-#                 }}
-
-#                 function addRow(typeVal, magVal) {{
-#                     typeVal = typeVal || '';
-#                     magVal = magVal || '1';
-#                     var rowId = 'row_' + Math.random().toString(36).substr(2, 9);
-
-#                     var html = `
-#                         <tr id="${{rowId}}">
-#                             <td>
-#                                 <input type="text" class="vTextField sync-input"
-#                                        value="${{typeVal.replace(/"/g, '&quot;')}}"
-#                                        style="width: 95%;" placeholder="e.g. Item Name">
-#                             </td>
-#                             <td>
-#                                 <select class="sync-select" style="width: 100%;">
-#                                     <option value="1" ${{magVal == '1' ? 'selected' : ''}}>1</option>
-#                                     <option value="2" ${{magVal == '2' ? 'selected' : ''}}>2</option>
-#                                     <option value="3" ${{magVal == '3' ? 'selected' : ''}}>3</option>
-#                                 </select>
-#                             </td>
-#                             <td>
-#                                 <button type="button" class="remove-btn"
-#                                         style="color: red; cursor: pointer; border: none; background: none; font-weight: bold;">
-#                                     ✖
-#                                 </button>
-#                             </td>
-#                         </tr>
-#                     `;
-#                     tbody.append(html);
-#                 }}
-
-#                 function updateHiddenInputs() {{
-#                     var typeArr = [];
-#                     var magArr = [];
-#                     tbody.find('tr').each(function() {{
-#                         var t = $(this).find('.sync-input').val();
-#                         var m = $(this).find('.sync-select').val();
-#                         if (t && t.trim() !== '') {{
-#                             typeArr.push(t.replace(/;/g, ',').trim());
-#                             magArr.push(m);
-#                         }}
-#                     }});
-#                     typesInput.val(typeArr.join('; '));
-#                     magsInput.val(magArr.join('; '));
-#                 }}
-
-#                 function init() {{
-#                     var tRaw = typesInput.val() || '';
-#                     var mRaw = magsInput.val() || '';
-#                     var types = tRaw.split(';');
-#                     var mags = mRaw.split(';');
-#                     tbody.empty();
-#                     for (var i = 0; i < types.length; i++) {{
-#                         var t = types[i].trim();
-#                         if (t) {{
-#                             var m = (mags[i]) ? mags[i].trim() : '1';
-#                             addRow(t, m);
-#                         }}
-#                     }}
-#                 }}
-
-#                 addBtn.on('click', function() {{ addRow('', '1'); }});
-#                 tbody.on('click', '.remove-btn', function() {{
-#                     $(this).closest('tr').remove();
-#                     updateHiddenInputs();
-#                 }});
-#                 tbody.on('change keyup', '.sync-input, .sync-select', function() {{
-#                     updateHiddenInputs();
-#                 }});
-#                 init();
-#             }});
-#         }})(django.jQuery);
-#         </script>
-#         """
-#         return mark_safe(html)
-
-
-# class PairedSemicolonWidget(Widget):
-#     """
-#     A custom widget that renders a list of (Name + Magnitude) pairs.
-#     Now supports a 'data_choices' list to create a dropdown (datalist) for the Name field.
-#     """
-#     template_name = 'django/forms/widgets/textarea.html'
-
-#     def __init__(self, magnitude_field_name, label_text="Medication Type", data_choices=None, *args, **kwargs):
-#         self.magnitude_field_name = magnitude_field_name
-#         self.label_text = label_text
-#         # Store choices here. Defaults to empty, populated via Form __init__
-#         self.data_choices = data_choices if data_choices is not None else []
-#         super().__init__(*args, **kwargs)
-
-#     def render(self, name, value, attrs=None, renderer=None):
-#         main_id = attrs.get('id', name)
-#         mag_id = main_id.replace(name, self.magnitude_field_name)
-#         current_types = value if value is not None else ''
-
-#         # Generate a unique ID for the datalist based on the input ID
-#         datalist_id = f"list_{main_id}"
-
-#         # Build the <datalist> HTML options from self.data_choices
-#         options_html = ""
-#         for item in self.data_choices:
-#             # Escape quotes to prevent HTML breaking
-#             clean_item = str(item).replace('"', '&quot;')
-#             options_html += f'<option value="{clean_item}">'
-
-#         html = f"""
-#         <div id="wrapper_{main_id}" class="paired-widget-wrapper"
-#              data-main-id="{main_id}" data-mag-id="{mag_id}"
-#              style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9;">
-
-#             <datalist id="{datalist_id}">
-#                 {options_html}
-#             </datalist>
-
-#             <table class="paired-table" style="width: 100%; text-align: left;">
-#                 <thead>
-#                     <tr>
-#                         <th style="width: 70%">{self.label_text}</th>  <th style="width: 20%">Magnitude (1-3)</th>
-#                         <th style="width: 10%">Action</th>
-#                     </tr>
-#                 </thead>
-#                 <tbody id="tbody_{main_id}">
-#                     </tbody>
-#             </table>
-
-#             <div style="margin-top: 10px;">
-#                 <button type="button" id="btn_add_{main_id}" class="button" style="font-weight: bold;">+ Add Row</button>
-#             </div>
-
-#             <input type="hidden" name="{name}" id="{main_id}" value="{current_types}">
-#         </div>
-
-#         <script>
-#         (function($) {{
-#             $(document).ready(function() {{
-#                 var wrapper = $('#wrapper_{main_id}');
-#                 var typesInput = $('#{main_id}');
-#                 var magsInput = $('#{mag_id}');
-#                 var tbody = $('#tbody_{main_id}');
-#                 var addBtn = $('#btn_add_{main_id}');
-
-#                 magsInput.closest('.form-row').hide();
-#                 if(magsInput.closest('.form-row').length === 0) {{
-#                     magsInput.attr('type', 'hidden');
-#                     $('label[for="{mag_id}"]').hide();
-#                 }}
-
-#                 function addRow(typeVal, magVal) {{
-#                     typeVal = typeVal || '';
-#                     magVal = magVal || '1';
-#                     var rowId = 'row_' + Math.random().toString(36).substr(2, 9);
-
-#                     // UPDATED: Input now includes list="{datalist_id}" attribute
-#                     var html = `
-#                         <tr id="${{rowId}}">
-#                             <td>
-#                                 <input type="text" list="{datalist_id}" class="vTextField sync-input"
-#                                        value="${{typeVal.replace(/"/g, '&quot;')}}"
-#                                        style="width: 95%;" placeholder="Select or Type...">
-#                             </td>
-#                             <td>
-#                                 <select class="sync-select" style="width: 100%;">
-#                                     <option value="1" ${{magVal == '1' ? 'selected' : ''}}>1</option>
-#                                     <option value="2" ${{magVal == '2' ? 'selected' : ''}}>2</option>
-#                                     <option value="3" ${{magVal == '3' ? 'selected' : ''}}>3</option>
-#                                 </select>
-#                             </td>
-#                             <td>
-#                                 <button type="button" class="remove-btn"
-#                                         style="color: red; cursor: pointer; border: none; background: none; font-weight: bold;">
-#                                     ✖
-#                                 </button>
-#                             </td>
-#                         </tr>
-#                     `;
-#                     tbody.append(html);
-#                 }}
-
-#                 function updateHiddenInputs() {{
-#                     var typeArr = [];
-#                     var magArr = [];
-#                     tbody.find('tr').each(function() {{
-#                         var t = $(this).find('.sync-input').val();
-#                         var m = $(this).find('.sync-select').val();
-#                         if (t && t.trim() !== '') {{
-#                             typeArr.push(t.replace(/;/g, ',').trim());
-#                             magArr.push(m);
-#                         }}
-#                     }});
-#                     typesInput.val(typeArr.join('; '));
-#                     magsInput.val(magArr.join('; '));
-#                 }}
-
-#                 function init() {{
-#                     var tRaw = typesInput.val() || '';
-#                     var mRaw = magsInput.val() || '';
-#                     var types = tRaw.split(';');
-#                     var mags = mRaw.split(';');
-#                     tbody.empty();
-#                     for (var i = 0; i < types.length; i++) {{
-#                         var t = types[i].trim();
-#                         if (t) {{
-#                             var m = (mags[i]) ? mags[i].trim() : '1';
-#                             addRow(t, m);
-#                         }}
-#                     }}
-#                 }}
-
-#                 addBtn.on('click', function() {{ addRow('', '1'); }});
-#                 tbody.on('click', '.remove-btn', function() {{
-#                     $(this).closest('tr').remove();
-#                     updateHiddenInputs();
-#                 }});
-#                 tbody.on('change keyup', '.sync-input, .sync-select', function() {{
-#                     updateHiddenInputs();
-#                 }});
-#                 init();
-#             }});
-#         }})(django.jQuery);
-#         </script>
-#         """
-#         return mark_safe(html)
-
-
-class PairedSemicolonWidget(Widget):
-    """
-    A custom widget that renders a list of (Name + Magnitude) pairs.
-    Now supports dynamic 'data_choices' (for the Name) AND 'magnitude_choices' (for the Score).
-    """
-    template_name = 'django/forms/widgets/textarea.html'
-
-    def __init__(self, magnitude_field_name, label_text="Medication Type", data_choices=None, magnitude_choices=None, *args, **kwargs):
-        self.magnitude_field_name = magnitude_field_name
-        self.label_text = label_text
-        self.data_choices = data_choices if data_choices is not None else []
-        # Default to 1-3 if nothing is passed, but we will pass DB values later
-        self.magnitude_choices = magnitude_choices if magnitude_choices is not None else [
-            '1', '2', '3']
-        super().__init__(*args, **kwargs)
-
-    def render(self, name, value, attrs=None, renderer=None):
-        main_id = attrs.get('id', name)
-        mag_id = main_id.replace(name, self.magnitude_field_name)
-        current_types = value if value is not None else ''
-
-        datalist_id = f"list_{main_id}"
-
-        # 1. Build DataList options (for the Name input)
-        data_options_html = ""
-        for item in self.data_choices:
-            clean_item = str(item).replace('"', '&quot;')
-            data_options_html += f'<option value="{clean_item}">'
-
-        # 2. Build Magnitude Select Options (from DB values)
-        mag_options_html = ""
-        for score in self.magnitude_choices:
-            s_clean = str(score).strip()
-            mag_options_html += f'<option value="{s_clean}">{s_clean}</option>'
-
-        html = f"""
-        <div id="wrapper_{main_id}" class="paired-widget-wrapper"
-             data-main-id="{main_id}" data-mag-id="{mag_id}"
-             style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9;">
-
-            <datalist id="{datalist_id}">
-                {data_options_html}
-            </datalist>
-
-            <table class="paired-table" style="width: 100%; text-align: left;">
-                <thead>
-                    <tr>
-                        <th style="width: 70%">{self.label_text}</th>  <th style="width: 20%">Magnitude</th>
-                        <th style="width: 10%">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody_{main_id}">
-                    </tbody>
-            </table>
-
-            <div style="margin-top: 10px;">
-                <button type="button" id="btn_add_{main_id}" class="button" style="font-weight: bold;">+ Add Row</button>
-            </div>
-
-            <input type="hidden" name="{name}" id="{main_id}" value="{current_types}">
-        </div>
-
-        <script>
-        (function($) {{
-            $(document).ready(function() {{
-                var wrapper = $('#wrapper_{main_id}');
-                var typesInput = $('#{main_id}');
-                var magsInput = $('#{mag_id}');
-                var tbody = $('#tbody_{main_id}');
-                var addBtn = $('#btn_add_{main_id}');
-
-                // Store our dynamic options in a JS variable
-                var magOptionsHTML = `{mag_options_html}`;
-
-                magsInput.closest('.form-row').hide();
-                if(magsInput.closest('.form-row').length === 0) {{
-                    magsInput.attr('type', 'hidden');
-                    $('label[for="{mag_id}"]').hide();
-                }}
-
-                function addRow(typeVal, magVal) {{
-                    typeVal = typeVal || '';
-                    magVal = magVal ? magVal.trim() : ''; // Don't default to '1' yet, let logic handle it later
-
-                    var rowId = 'row_' + Math.random().toString(36).substr(2, 9);
-
-                    var html = `
-                        <tr id="${{rowId}}">
-                            <td>
-                                <input type="text" list="{datalist_id}" class="vTextField sync-input"
-                                       value="${{typeVal.replace(/"/g, '&quot;')}}"
-                                       style="width: 95%;" placeholder="Select or Type...">
-                            </td>
-                            <td>
-                                <select class="sync-select" style="width: 100%;">
-                                    ${{magOptionsHTML}}
-                                </select>
-                            </td>
-                            <td>
-                                <button type="button" class="remove-btn"
-                                        style="color: red; cursor: pointer; border: none; background: none; font-weight: bold;">
-                                    ✖
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-
-                    var $row = $(html);
-                    tbody.append($row);
-
-                    // If we have a value (from DB), select it.
-                    // If it's a new row (empty magVal), select the first option by default.
-                    if (magVal) {{
-                        $row.find('.sync-select').val(magVal);
-                    }} else {{
-                         $row.find('.sync-select option:first').prop('selected', true);
-                    }}
-                }}
-
-                function updateHiddenInputs() {{
-                    var typeArr = [];
-                    var magArr = [];
-                    tbody.find('tr').each(function() {{
-                        var t = $(this).find('.sync-input').val();
-                        var m = $(this).find('.sync-select').val();
-                        if (t && t.trim() !== '') {{
-                            typeArr.push(t.replace(/;/g, ',').trim());
-                            magArr.push(m);
-                        }}
-                    }});
-                    typesInput.val(typeArr.join('; '));
-                    magsInput.val(magArr.join('; '));
-                }}
-
-                function init() {{
-                    var tRaw = typesInput.val() || '';
-                    var mRaw = magsInput.val() || '';
-                    var types = tRaw.split(';');
-                    var mags = mRaw.split(';');
-                    tbody.empty();
-                    for (var i = 0; i < types.length; i++) {{
-                        var t = types[i].trim();
-                        if (t) {{
-                            var m = (mags[i]) ? mags[i].trim() : '';
-                            addRow(t, m);
-                        }}
-                    }}
-                }}
-
-                addBtn.on('click', function() {{ addRow('', ''); }});
-                tbody.on('click', '.remove-btn', function() {{
-                    $(this).closest('tr').remove();
-                    updateHiddenInputs();
-                }});
-                tbody.on('change keyup', '.sync-input, .sync-select', function() {{
-                    updateHiddenInputs();
-                }});
-                init();
-            }});
-        }})(django.jQuery);
-        </script>
-        """
-        return mark_safe(html)
-
-
-# ==============================================================================
-# 1. ANALYSIS (Search: Name, Acronym)
-# ==============================================================================
-
-
-class AnalysisAdminForm(forms.ModelForm):
-    # Searchable Multi-Select Widgets for text-based relationships
-    tcm_diag_low = forms.MultipleChoiceField(
-        required=False, label="TCM Diagnosis (Low)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
-    tcm_diag_high = forms.MultipleChoiceField(
-        required=False, label="TCM Diagnosis (High)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
-    func_diag_low = forms.MultipleChoiceField(
-        required=False, label="Functional Med Diagnosis (Low)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
-    func_diag_high = forms.MultipleChoiceField(
-        required=False, label="Functional Med Diagnosis (High)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
-
-    class Meta:
-        model = Analysis
-        fields = '__all__'
-
-    @property
-    def media(self):
-        return forms.Media(**SHARED_MEDIA)
-
-    def __init__(self, *args, **kwargs):
-        super(AnalysisAdminForm, self).__init__(*args, **kwargs)
-
-        # 1. Fetch Source Data
-        patterns = list(Pattern.objects.values_list(
-            'tcm_patterns', flat=True).distinct().order_by('tcm_patterns'))
-        func_cats = list(FunctionalCategory.objects.values_list(
-            'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
-
-        # 2. Populate Widget Choices
-        # Note: We filter out empty strings
-        p_choices = [(p, p) for p in patterns if p]
-        f_choices = [(f, f) for f in func_cats if f]
-
-        self.fields['tcm_diag_low'].choices = p_choices
-        self.fields['tcm_diag_high'].choices = p_choices
-        self.fields['func_diag_low'].choices = f_choices
-        self.fields['func_diag_high'].choices = f_choices
-
-        # 3. Set Initial Values (Parse String -> List)
-        instance = getattr(self, 'instance', None)
-        if instance and instance.pk:
-            # We pass a list of JUST the keys/values to helper
-            p_flat = [p for p in patterns if p]
-            f_flat = [f for f in func_cats if f]
-
-            self.initial['tcm_diag_low'] = get_initial_list(
-                instance.tcm_diag_low, p_flat)
-            self.initial['tcm_diag_high'] = get_initial_list(
-                instance.tcm_diag_high, p_flat)
-            self.initial['func_diag_low'] = get_initial_list(
-                instance.func_diag_low, f_flat)
-            self.initial['func_diag_high'] = get_initial_list(
-                instance.func_diag_high, f_flat)
-
-    # Save Logic: Convert List -> String
-    def clean_tcm_diag_low(self): return list_to_semicolon_string(
-        self.cleaned_data['tcm_diag_low'])
-
-    def clean_tcm_diag_high(self): return list_to_semicolon_string(
-        self.cleaned_data['tcm_diag_high'])
-
-    def clean_func_diag_low(self): return list_to_semicolon_string(
-        self.cleaned_data['func_diag_low'])
-    def clean_func_diag_high(self): return list_to_semicolon_string(
-        self.cleaned_data['func_diag_high'])
-
-
-@admin.register(Analysis)
-class AnalysisAdmin(admin.ModelAdmin):
-    form = AnalysisAdminForm
-
-    # --- ADDED SEARCH FIELDS ---
-    search_fields = ('blood_test', 'blood_test_full',
-                     'blood_test_acronym', 'panel', 'units', 'units_interchangeable', 'severity', 'vital_marker')
-    # --- LIST DISPLAY UPDATED WITH CLICK WRAPPERS ---
-    list_display = (
-        'panel', 'blood_test', 'blood_test_full', 'blood_test_acronym',
-        'units', 'units_interchangeable', 'ideal_low', 'ideal_high',
-        'absence_low', 'absence_high', 'severity', 'vital_marker',
-
-        # Updated fields using the _click wrappers
-        'tcm_diag_low', 'tcm_diag_high',
-        'func_diag_low_click', 'func_diag_high_click',
-        'conv_diag_low_click', 'conv_diag_high_click',
-
-
-        'func_panel_1', 'func_panel_2', 'func_panel_3'
-    )
-    list_display_links = ('blood_test', 'panel',)
-
-    fieldsets = (
-        ('Blood Marker Identification', {
-            'fields': ('panel', 'blood_test', 'blood_test_full', 'blood_test_acronym', 'vital_marker')
-        }),
-        ('Ranges & Severity', {
-            'fields': (('ideal_low', 'ideal_high'), ('absence_low', 'absence_high'), 'severity')
-        }),
-        ('Medicine & TCM Diagnoses', {
-            'description': "Search and select multiple items.",
-            'fields': (
-                'tcm_diag_low', 'tcm_diag_high',
-                'func_diag_low', 'func_diag_high',
-            )
-        }),
-        ('Conventional Medicine Diagnoses', {
-            'fields': ('conv_diag_low', 'conv_diag_high')
-        }),
-        ('Functional Panels', {
-            'fields': ('func_panel_1', 'func_panel_2', 'func_panel_3')
-        }),
-        ('Units', {
-            'fields': ('units', 'units_interchangeable')
-        }),
-    )
-    list_filter = ('panel', 'blood_test', 'severity', 'units',
-                   'units_interchangeable', 'severity', 'vital_marker')
-    list_per_page = 50
-
-    # --- HELPER FOR TOGGLING TEXT ---
-    def _create_click_to_open(self, text):
-        """
-        Creates a toggleable text field using simple JavaScript.
-        """
-        if not text:
-            return "-"
-
-        # If text is short, just show it
-        if len(text) <= 50:
-            return text
-
-        short_text = text[:50] + "..."
-
-        # Two divs: one for short view, one for full view.
-        return format_html(
-            '<div class="text-toggle-container">'
-            # -- SHORT VERSION (Click to Expand) --
-            '<div style="cursor:pointer; display:block;" '
-            'onclick="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">'
-            '<span>{}</span> '
-            '<span style="color:#447e9b; font-weight:bold;"> &#9662;</span>'  # Down Arrow
-            '</div>'
-
-            # -- FULL VERSION (Click to Collapse) --
-            '<div style="cursor:pointer; display:none;" '
-            'onclick="this.style.display=\'none\'; this.previousElementSibling.style.display=\'block\';">'
-            '<span>{}</span> '
-            '<span style="color:#447e9b; font-weight:bold;"> &#9652;</span>'  # Up Arrow
-            '</div>'
-            '</div>',
-            short_text,
-            text
-        )
-
-    # --- WRAPPER METHODS ---
-
-    def func_diag_low_click(self, obj):
-        return self._create_click_to_open(obj.func_diag_low)
-    func_diag_low_click.short_description = "Functional Med Diagnosis (Low)"
-
-    def func_diag_high_click(self, obj):
-        return self._create_click_to_open(obj.func_diag_high)
-    func_diag_high_click.short_description = "Functional Med Diagnosis (High)"
-
-    def conv_diag_low_click(self, obj):
-        return self._create_click_to_open(obj.conv_diag_low)
-    conv_diag_low_click.short_description = "Conventional Med Diagnosis (Low)"
-
-    def conv_diag_high_click(self, obj):
-        return self._create_click_to_open(obj.conv_diag_high)
-    conv_diag_high_click.short_description = "Conventional Med Diagnosis (High)"
-
-    def organs_conv_func_click(self, obj):
-        return self._create_click_to_open(obj.organs_conv_func)
-    organs_conv_func_click.short_description = "Organs (Conv & Func)"
-
-    def organs_tcm_click(self, obj):
-        return self._create_click_to_open(obj.organs_tcm)
-    organs_tcm_click.short_description = "Organs (TCM)"
-
-    def possible_assoc_pathogens_click(self, obj):
-        return self._create_click_to_open(obj.possible_assoc_pathogens)
-    possible_assoc_pathogens_click.short_description = "Possible Assoc Pathogens"
-
-# ==============================================================================
-# 2. PATTERNS (Search: Name | Select: Body Type, Pathogen)
-# ==============================================================================
-
-
-# class SemicolonListWidget(Widget):
-#     """
-#     A custom widget that renders a list of text items.
-#     User adds rows, system saves as 'Item A; Item B; Item C'.
-#     """
-#     template_name = 'django/forms/widgets/textarea.html'
-
-#     def render(self, name, value, attrs=None, renderer=None):
-#         main_id = attrs.get('id', name)
-#         current_val = value if value is not None else ''
-
-#         html = f"""
-#         <div id="wrapper_{main_id}" style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9;">
-#             <table style="width: 100%; text-align: left;">
-#                 <thead>
-#                     <tr>
-#                         <th style="width: 90%">Symptom / Item</th>
-#                         <th style="width: 10%">Action</th>
-#                     </tr>
-#                 </thead>
-#                 <tbody id="tbody_{main_id}">
-#                 </tbody>
-#             </table>
-
-#             <div style="margin-top: 10px;">
-#                 <button type="button" id="btn_add_{main_id}" class="button" style="font-weight: bold;">+ Add Item</button>
-#             </div>
-
-#             <input type="hidden" name="{name}" id="{main_id}" value="{current_val}">
-#         </div>
-
-#         <script>
-#         (function($) {{
-#             $(document).ready(function() {{
-#                 var input = $('#{main_id}');
-#                 var tbody = $('#tbody_{main_id}');
-#                 var addBtn = $('#btn_add_{main_id}');
-
-#                 function addRow(val) {{
-#                     val = val || '';
-#                     var rowId = 'row_' + Math.random().toString(36).substr(2, 9);
-
-#                     var html = `
-#                         <tr id="${{rowId}}">
-#                             <td>
-#                                 <input type="text" class="vTextField sync-input"
-#                                        value="${{val.replace(/"/g, '&quot;')}}"
-#                                        style="width: 98%;" placeholder="e.g. Headache">
-#                             </td>
-#                             <td>
-#                                 <button type="button" class="remove-btn"
-#                                         style="color: red; cursor: pointer; border: none; background: none; font-weight: bold;">
-#                                     ✖
-#                                 </button>
-#                             </td>
-#                         </tr>
-#                     `;
-#                     tbody.append(html);
-#                 }}
-
-#                 function updateHiddenInput() {{
-#                     var arr = [];
-#                     tbody.find('.sync-input').each(function() {{
-#                         var t = $(this).val();
-#                         if (t && t.trim() !== '') {{
-#                             // Replace semicolons to prevent corruption, then trim
-#                             arr.push(t.replace(/;/g, ',').trim());
-#                         }}
-#                     }});
-#                     input.val(arr.join(';'));
-#                 }}
-
-#                 // Init
-#                 var raw = input.val() || '';
-#                 if(raw) {{
-#                     var items = raw.split(';');
-#                     items.forEach(function(item) {{
-#                         if(item.trim()) addRow(item.trim());
-#                     }});
-#                 }}
-
-#                 // Events
-#                 addBtn.on('click', function() {{ addRow(''); }});
-
-#                 tbody.on('click', '.remove-btn', function() {{
-#                     $(this).closest('tr').remove();
-#                     updateHiddenInput();
-#                 }});
-
-#                 tbody.on('change keyup', '.sync-input', function() {{
-#                     updateHiddenInput();
-#                 }});
-#             }});
-#         }})(django.jQuery);
-#         </script>
-#         """
-#         return mark_safe(html)
 
 class StrictSemicolonListWidget(Widget):
     """
@@ -993,83 +304,1017 @@ class StrictSemicolonListWidget(Widget):
         return mark_safe(html)
 
 
-# class PatternAdminForm(forms.ModelForm):
-#     # 1. Body Types (Primary, Secondary, Tertiary)
-#     body_type_primary = forms.ChoiceField(
-#         required=False, label="TCM Body Type - Primary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     body_type_secondary = forms.ChoiceField(
-#         required=False, label="TCM Body Type - Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
-#     body_type_tertiary = forms.ChoiceField(
-#         required=False, label="TCM Body Type - Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
+# class PairedSemicolonWidget(Widget):
+#     """
+#     A custom widget that renders a list of (Name + Magnitude) pairs.
+#     Now supports dynamic 'data_choices' (for the Name) AND 'magnitude_choices' (for the Score).
+#     """
+#     template_name = 'django/forms/widgets/textarea.html'
 
-#     # 2. Pathogen
-#     pathogenic_factor = forms.ChoiceField(
-#         required=False, label="Pathogenic Factor", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     def __init__(self, magnitude_field_name, label_text="Medication Type", data_choices=None, magnitude_choices=None, *args, **kwargs):
+#         self.magnitude_field_name = magnitude_field_name
+#         self.label_text = label_text
+#         self.data_choices = data_choices if data_choices is not None else []
+#         # Default to 1-3 if nothing is passed, but we will pass DB values later
+#         self.magnitude_choices = magnitude_choices if magnitude_choices is not None else [
+#             '1', '2', '3']
+#         super().__init__(*args, **kwargs)
 
-#     # 3. Excess/Deficiency/General (Fixed Choices)
-#     excess_deficiency = forms.ChoiceField(
-#         choices=[
-#             ('', 'Select Type...'),
-#             ('Excess', 'Excess'),
-#             ('Deficiency', 'Deficiency'),
-#             ('General', 'General')
-#         ],
-#         required=False,
-#         label="Excess/Deficiency/General",
-#         widget=forms.Select(attrs=WIDGET_ATTRS)
-#     )
+#     def render(self, name, value, attrs=None, renderer=None):
+#         main_id = attrs.get('id', name)
+#         mag_id = main_id.replace(name, self.magnitude_field_name)
+#         current_types = value if value is not None else ''
 
-#     class Meta:
-#         model = Pattern
-#         fields = '__all__'
-#         # 4. Apply the Semicolon Widget to Symptoms
-#         widgets = {
-#             'symptoms': SemicolonListWidget(),
-#         }
+#         datalist_id = f"list_{main_id}"
 
-#     @property
-#     def media(self): return forms.Media(**SHARED_MEDIA)
+#         # 1. Build DataList options (for the Name input)
+#         data_options_html = ""
+#         for item in self.data_choices:
+#             clean_item = str(item).replace('"', '&quot;')
+#             data_options_html += f'<option value="{clean_item}">'
 
-#     def __init__(self, *args, **kwargs):
-#         super(PatternAdminForm, self).__init__(*args, **kwargs)
+#         # 2. Build Magnitude Select Options (from DB values)
+#         mag_options_html = ""
+#         for score in self.magnitude_choices:
+#             s_clean = str(score).strip()
+#             mag_options_html += f'<option value="{s_clean}">{s_clean}</option>'
 
-#         # Load Body Types from DB
-#         body_types = list(TCMBodyTypeMapping.objects.values_list(
-#             'tcm_body_type', flat=True).distinct())
+#         html = f"""
+#         <div id="wrapper_{main_id}" class="paired-widget-wrapper"
+#              data-main-id="{main_id}" data-mag-id="{mag_id}"
+#              style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9;">
 
-#         # Load Pathogens
-#         pathogens = list(TCMPathogenDefinition.objects.values_list(
-#             'pathogen', flat=True).distinct())
+#             <datalist id="{datalist_id}">
+#                 {data_options_html}
+#             </datalist>
 
-#         # Create Standard Choices List
-#         bt_choices = [('', 'Select Body Type...')] + [(b, b)
-#                                                       for b in body_types if b]
-#         p_choices = [('', 'Select Pathogen...')] + [(p, p)
-#                                                     for p in pathogens if p]
+#             <table class="paired-table" style="width: 100%; text-align: left;">
+#                 <thead>
+#                     <tr>
+#                         <th style="width: 70%">{self.label_text}</th>  <th style="width: 20%">Magnitude</th>
+#                         <th style="width: 10%">Action</th>
+#                     </tr>
+#                 </thead>
+#                 <tbody id="tbody_{main_id}">
+#                     </tbody>
+#             </table>
 
-#         # Apply Choices to Fields
-#         self.fields['body_type_primary'].choices = bt_choices
-#         self.fields['body_type_secondary'].choices = bt_choices
-#         self.fields['body_type_tertiary'].choices = bt_choices
+#             <div style="margin-top: 10px;">
+#                 <button type="button" id="btn_add_{main_id}" class="button" style="font-weight: bold;">+ Add Row</button>
+#             </div>
 
-#         self.fields['pathogenic_factor'].choices = p_choices
+#             <input type="hidden" name="{name}" id="{main_id}" value="{current_types}">
+#         </div>
+
+#         <script>
+#         (function($) {{
+#             $(document).ready(function() {{
+#                 var wrapper = $('#wrapper_{main_id}');
+#                 var typesInput = $('#{main_id}');
+#                 var magsInput = $('#{mag_id}');
+#                 var tbody = $('#tbody_{main_id}');
+#                 var addBtn = $('#btn_add_{main_id}');
+
+#                 // Store our dynamic options in a JS variable
+#                 var magOptionsHTML = `{mag_options_html}`;
+
+#                 magsInput.closest('.form-row').hide();
+#                 if(magsInput.closest('.form-row').length === 0) {{
+#                     magsInput.attr('type', 'hidden');
+#                     $('label[for="{mag_id}"]').hide();
+#                 }}
+
+#                 function addRow(typeVal, magVal) {{
+#                     typeVal = typeVal || '';
+#                     magVal = magVal ? magVal.trim() : ''; // Don't default to '1' yet, let logic handle it later
+
+#                     var rowId = 'row_' + Math.random().toString(36).substr(2, 9);
+
+#                     var html = `
+#                         <tr id="${{rowId}}">
+#                             <td>
+#                                 <input type="text" list="{datalist_id}" class="vTextField sync-input"
+#                                        value="${{typeVal.replace(/"/g, '&quot;')}}"
+#                                        style="width: 95%;" placeholder="Select or Type...">
+#                             </td>
+#                             <td>
+#                                 <select class="sync-select" style="width: 100%;">
+#                                     ${{magOptionsHTML}}
+#                                 </select>
+#                             </td>
+#                             <td>
+#                                 <button type="button" class="remove-btn"
+#                                         style="color: red; cursor: pointer; border: none; background: none; font-weight: bold;">
+#                                     ✖
+#                                 </button>
+#                             </td>
+#                         </tr>
+#                     `;
+
+#                     var $row = $(html);
+#                     tbody.append($row);
+
+#                     // If we have a value (from DB), select it.
+#                     // If it's a new row (empty magVal), select the first option by default.
+#                     if (magVal) {{
+#                         $row.find('.sync-select').val(magVal);
+#                     }} else {{
+#                          $row.find('.sync-select option:first').prop('selected', true);
+#                     }}
+#                 }}
+
+#                 function updateHiddenInputs() {{
+#                     var typeArr = [];
+#                     var magArr = [];
+#                     tbody.find('tr').each(function() {{
+#                         var t = $(this).find('.sync-input').val();
+#                         var m = $(this).find('.sync-select').val();
+#                         if (t && t.trim() !== '') {{
+#                             typeArr.push(t.replace(/;/g, ',').trim());
+#                             magArr.push(m);
+#                         }}
+#                     }});
+#                     typesInput.val(typeArr.join('; '));
+#                     magsInput.val(magArr.join('; '));
+#                 }}
+
+#                 function init() {{
+#                     var tRaw = typesInput.val() || '';
+#                     var mRaw = magsInput.val() || '';
+#                     var types = tRaw.split(';');
+#                     var mags = mRaw.split(';');
+#                     tbody.empty();
+#                     for (var i = 0; i < types.length; i++) {{
+#                         var t = types[i].trim();
+#                         if (t) {{
+#                             var m = (mags[i]) ? mags[i].trim() : '';
+#                             addRow(t, m);
+#                         }}
+#                     }}
+#                 }}
+
+#                 addBtn.on('click', function() {{ addRow('', ''); }});
+#                 tbody.on('click', '.remove-btn', function() {{
+#                     $(this).closest('tr').remove();
+#                     updateHiddenInputs();
+#                 }});
+#                 tbody.on('change keyup', '.sync-input, .sync-select', function() {{
+#                     updateHiddenInputs();
+#                 }});
+#                 init();
+#             }});
+#         }})(django.jQuery);
+#         </script>
+#         """
+#         return mark_safe(html)
+
+class PairedSemicolonWidget(Widget):
+    """
+    A custom widget that renders a list of (Name + Magnitude) pairs.
+    Now supports dynamic 'data_choices' (for the Name) AND 'magnitude_choices' (for the Score).
+    FIXED: Robust JS loading to prevent "Add Row" button failure.
+    """
+    template_name = 'django/forms/widgets/textarea.html'
+
+    def __init__(self, magnitude_field_name, label_text="Medication Type", data_choices=None, magnitude_choices=None, *args, **kwargs):
+        self.magnitude_field_name = magnitude_field_name
+        self.label_text = label_text
+        self.data_choices = data_choices if data_choices is not None else []
+        self.magnitude_choices = magnitude_choices if magnitude_choices is not None else [
+            '1', '2', '3']
+        super().__init__(*args, **kwargs)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        main_id = attrs.get('id', name)
+        mag_id = main_id.replace(name, self.magnitude_field_name)
+        current_types = value if value is not None else ''
+
+        datalist_id = f"list_{main_id}"
+
+        # 1. Build DataList options (for the Name input)
+        data_options_html = ""
+        for item in self.data_choices:
+            clean_item = str(item).replace('"', '&quot;')
+            data_options_html += f'<option value="{clean_item}">'
+
+        # 2. Build Magnitude Select Options (from DB values)
+        mag_options_html = ""
+        for score in self.magnitude_choices:
+            s_clean = str(score).strip()
+            mag_options_html += f'<option value="{s_clean}">{s_clean}</option>'
+
+        # 3. Create a SAFE JavaScript string for the options (avoids line break errors)
+        safe_mag_options = mag_options_html.replace(
+            '\n', '').replace('"', '\\"')
+
+        html = f"""
+        <div id="wrapper_{main_id}" class="paired-widget-wrapper"
+             data-main-id="{main_id}" data-mag-id="{mag_id}"
+             style="border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9;">
+
+            <datalist id="{datalist_id}">
+                {data_options_html}
+            </datalist>
+
+            <table class="paired-table" style="width: 100%; text-align: left;">
+                <thead>
+                    <tr>
+                        <th style="width: 70%">{self.label_text}</th>  <th style="width: 20%">Magnitude</th>
+                        <th style="width: 10%">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody_{main_id}">
+                    </tbody>
+            </table>
+
+            <div style="margin-top: 10px;">
+                <button type="button" id="btn_add_{main_id}" class="button" style="font-weight: bold;">+ Add Row</button>
+            </div>
+
+            <input type="hidden" name="{name}" id="{main_id}" value="{current_types}">
+        </div>
+
+        <script>
+        (function() {{
+            // Safe jQuery loader: Try django.jQuery, fall back to standard jQuery
+            var $ = (typeof django !== 'undefined' && django.jQuery) ? django.jQuery : window.jQuery;
+            
+            if (!$) {{
+                console.error("PairedSemicolonWidget: jQuery not found!");
+                return;
+            }}
+
+            $(document).ready(function() {{
+                try {{
+                    var wrapper = $('#wrapper_{main_id}');
+                    var typesInput = $('#{main_id}');
+                    var magsInput = $('#{mag_id}');
+                    var tbody = $('#tbody_{main_id}');
+                    var addBtn = $('#btn_add_{main_id}');
+
+                    // Use the pre-calculated safe string
+                    var magOptionsHTML = "{safe_mag_options}";
+
+                    // Hide the separate Magnitude field (since we sync to it)
+                    magsInput.closest('.form-row').hide();
+                    // Fallback for different admin themes
+                    if(magsInput.closest('.form-row').length === 0) {{
+                        magsInput.attr('type', 'hidden');
+                        $('label[for="{mag_id}"]').hide();
+                    }}
+
+                    function addRow(typeVal, magVal) {{
+                        typeVal = typeVal || '';
+                        magVal = magVal ? magVal.trim() : ''; 
+
+                        var rowId = 'row_' + Math.random().toString(36).substr(2, 9);
+
+                        var html = `
+                            <tr id="${{rowId}}">
+                                <td>
+                                    <input type="text" list="{datalist_id}" class="vTextField sync-input"
+                                           value="${{typeVal.replace(/"/g, '&quot;')}}"
+                                           style="width: 95%;" placeholder="Select or Type...">
+                                </td>
+                                <td>
+                                    <select class="sync-select" style="width: 100%;">
+                                        ${{magOptionsHTML}}
+                                    </select>
+                                </td>
+                                <td>
+                                    <button type="button" class="remove-btn" 
+                                            style="color: red; cursor: pointer; border: none; background: none; font-weight: bold; font-size: 16px;">
+                                        ✖
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                        
+                        var $row = $(html);
+                        tbody.append($row);
+
+                        if (magVal) {{
+                            $row.find('.sync-select').val(magVal);
+                        }} else {{
+                             $row.find('.sync-select option:first').prop('selected', true);
+                        }}
+                    }}
+
+                    function updateHiddenInputs() {{
+                        var typeArr = [];
+                        var magArr = [];
+                        tbody.find('tr').each(function() {{
+                            var t = $(this).find('.sync-input').val();
+                            var m = $(this).find('.sync-select').val();
+                            if (t && t.trim() !== '') {{
+                                typeArr.push(t.replace(/;/g, ',').trim());
+                                magArr.push(m);
+                            }}
+                        }});
+                        typesInput.val(typeArr.join('; '));
+                        magsInput.val(magArr.join('; '));
+                    }}
+
+                    function init() {{
+                        var tRaw = typesInput.val() || '';
+                        var mRaw = magsInput.val() || '';
+                        var types = tRaw.split(';');
+                        var mags = mRaw.split(';');
+                        tbody.empty();
+                        for (var i = 0; i < types.length; i++) {{
+                            var t = types[i].trim();
+                            if (t) {{
+                                var m = (mags[i]) ? mags[i].trim() : '';
+                                addRow(t, m);
+                            }}
+                        }}
+                    }}
+
+                    // --- Event Binding ---
+                    addBtn.on('click', function(e) {{ 
+                        e.preventDefault();
+                        console.log("Add Row Clicked"); // Debug check
+                        addRow('', ''); 
+                    }});
+                    
+                    tbody.on('click', '.remove-btn', function() {{
+                        $(this).closest('tr').remove();
+                        updateHiddenInputs();
+                    }});
+                    
+                    tbody.on('change keyup', '.sync-input, .sync-select', function() {{
+                        updateHiddenInputs();
+                    }});
+                    
+                    init();
+                    
+                }} catch (err) {{
+                    console.error("PairedSemicolonWidget Error:", err);
+                }}
+            }});
+        }})();
+        </script>
+        """
+        return mark_safe(html)
+
+
+def format_list_string(value):
+    if not value:
+        return value
+
+    # 1. Split the input string by commas to get individual items
+    #    (We also replace ' and ' with ',' just in case the user typed it manually)
+    items = [item.strip() for item in value.replace(
+        ' and ', ',').split(',') if item.strip()]
+
+    count = len(items)
+
+    if count == 0:
+        return ""
+    if count == 1:
+        return items[0]
+    if count == 2:
+        return f"{items[0]} and {items[1]}"
+
+    # For 3 or more: join all except last with commas, then add ' and ' before the last
+    main_part = ", ".join(items[:-1])
+    return f"{main_part} and {items[-1]}"
+
+
+# class RemindUpdateMixin:
+#     """
+#     SMART VALIDATION MIXIN:
+#     1. Checks if specific fields contain values NOT present in the target tables.
+#     2. If missing values are found, pauses save and shows "Verification Required".
+#     3. If values exist, saves immediately.
+#     """
+#     # Structure: [ (['field_names'], 'TargetModel', 'target_field', 'url_name', 'Link Text', 'Message') ]
+#     validation_map = []
+
+#     def save_model(self, request, obj, form, change):
+#         active_validations = []
+#         triggered = False
+
+#         if not self.validation_map:
+#             super().save_model(request, obj, form, change)
+#             return
+
+#         for entry in self.validation_map:
+#             # Unpack the rule. Support both old (4 arg) and new (6 arg) formats if necessary,
+#             # but here we use the new 6-arg format for smart checking.
+#             # Format: fields, model_class, lookup_field, url_name, link_text, msg
+#             if len(entry) == 6:
+#                 fields, target_model, lookup_field, url_name, display_name, message = entry
+
+#                 for field in fields:
+#                     value = form.cleaned_data.get(field)
+#                     if value:
+#                         # 1. Parse the values (handle lists or semicolon strings)
+#                         if isinstance(value, list):
+#                             items = value
+#                         else:
+#                             # Split by semicolon or comma to get individual tags
+#                             items = [x.strip() for x in str(value).replace(
+#                                 ';', ',').split(',') if x.strip()]
+
+#                         # 2. Check database for missing items
+#                         # Get all existing values from the target model
+#                         existing_values = set(
+#                             target_model.objects.values_list(lookup_field, flat=True))
+
+#                         # Find items that are NOT in the database
+#                         missing = [
+#                             item for item in items if item not in existing_values]
+
+#                         if missing:
+#                             triggered = True
+#                             # Add specific details to the message
+#                             detailed_msg = f"{message}<br><strong>New/Missing Items:</strong> {', '.join(missing)}"
+
+#                             try:
+#                                 url = reverse(url_name)
+#                                 active_validations.append({
+#                                     'url': url,
+#                                     'name': display_name,
+#                                     'message': mark_safe(detailed_msg)
+#                                 })
+#                             except Exception:
+#                                 pass
+#                             # Break loop for this group (don't add same error twice)
+#                             break
+#             else:
+#                 # Fallback for old simple logic (just checks if not empty)
+#                 # You can remove this else block if you update all mappings
+#                 pass
+
+#         if not triggered:
+#             # precise save
+#             super().save_model(request, obj, form, change)
+#         else:
+#             # Flag request to be intercepted in response_add/change
+#             request._needs_interception = True
+#             request._active_validations = active_validations
+
+#     # --- CRITICAL ADDITION: INTERCEPT RESPONSES ---
+#     def response_add(self, request, obj, post_url_continue=None):
+#         if getattr(request, '_needs_interception', False):
+#             return self._build_interception_page(request)
+#         return super().response_add(request, obj, post_url_continue)
+
+#     def response_change(self, request, obj):
+#         if getattr(request, '_needs_interception', False):
+#             return self._build_interception_page(request)
+#         return super().response_change(request, obj)
+
+#     def _build_interception_page(self, request):
+#         active_validations = getattr(request, '_active_validations', [])
+
+#         validation_html = ""
+#         for item in active_validations:
+#             validation_html += f"""
+#             <div class="validation-item">
+#                 <div class="validation-msg">{item['message']}</div>
+#                 <a href="{item['url']}" target="_blank" class="link-btn">
+#                     🔗 Go to {item['name']}
+#                 </a>
+#             </div>
+#             """
+
+#         html = f"""
+#         <!DOCTYPE html>
+#         <html>
+#         <head>
+#             <title>Verification Required</title>
+#             <style>
+#                 body {{ font-family: -apple-system, system-ui, sans-serif; background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
+#                 .card {{ background: white; padding: 40px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 600px; width: 100%; border-top: 6px solid #dc3545; }}
+#                 h2 {{ color: #dc3545; margin-top: 0; }}
+#                 .validation-item {{ background: #fff5f5; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 15px; text-align: left; }}
+#                 .validation-msg {{ color: #721c24; font-weight: 600; margin-bottom: 10px; }}
+#                 .link-btn {{ display: inline-block; padding: 6px 12px; background: #fff; color: #dc3545; text-decoration: none; border: 1px solid #dc3545; border-radius: 4px; font-size: 13px; font-weight: bold; }}
+#                 .link-btn:hover {{ background: #dc3545; color: white; }}
+#                 .back-btn {{ width: 100%; padding: 15px; background: #6c757d; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }}
+#                 .back-btn:hover {{ background: #5a6268; }}
+#             </style>
+#         </head>
+#         <body>
+#             <div class="card">
+#                 <h2>⚠️ Verification Required</h2>
+#                 <p>You entered data that does not exist in the linked tables yet.</p>
+#                 {validation_html}
+#                 <button class="back-btn" onclick="window.history.back();">⬅ Go Back & Fix</button>
+#                 <div style="margin-top: 15px; font-size: 12px; color: #999;">
+#                     Note: The Blood Marker was NOT saved. Create the missing items in the linked tables first, then come back and Save.
+#                 </div>
+#             </div>
+#         </body>
+#         </html>
+#         """
+#         return HttpResponse(html)
+
+
+class RemindUpdateMixin:
+    """
+    SMART VALIDATION MIXIN (Universal):
+    1. Standard Check: Checks if value exists in target table.
+    2. Split Check: If a delimiter (e.g. ';') is provided, splits DB text before checking.
+    """
+    # Structure: [ (['fields'], TargetModel, 'lookup_field', 'url', 'Page Name', 'Message', 'OPTIONAL_DELIMITER') ]
+    validation_map = []
+
+    def save_model(self, request, obj, form, change):
+        active_validations = []
+        triggered = False
+
+        if not self.validation_map:
+            super().save_model(request, obj, form, change)
+            return
+
+        for entry in self.validation_map:
+            # Initialize defaults
+            target_delimiter = None
+
+            # 1. HANDLE NEW FORMAT (7 items - with delimiter)
+            if len(entry) == 7:
+                fields, target_model, lookup_field, url_name, display_name, message, target_delimiter = entry
+
+            # 2. HANDLE OLD FORMAT (6 items - Standard) - SAFE FALLBACK
+            elif len(entry) == 6:
+                fields, target_model, lookup_field, url_name, display_name, message = entry
+
+            # Skip invalid configurations
+            else:
+                continue
+
+            for field in fields:
+                value = form.cleaned_data.get(field)
+                if value:
+                    # A. Parse the Form Input (what user typed)
+                    if isinstance(value, list):
+                        items = value
+                    else:
+                        # Split form input by semicolon or comma (Standardize input)
+                        items = [x.strip() for x in str(value).replace(
+                            ';', ',').split(',') if x.strip()]
+
+                    # B. Fetch Database Values
+                    raw_db_values = target_model.objects.values_list(
+                        lookup_field, flat=True)
+
+                    # C. Build Allowed List
+                    existing_values = set()
+
+                    if target_delimiter:
+                        # --- SPECIAL LOGIC: Split DB values (e.g. for Symptoms) ---
+                        for db_val in raw_db_values:
+                            if db_val:
+                                parts = [x.strip() for x in str(db_val).split(
+                                    target_delimiter) if x.strip()]
+                                existing_values.update(parts)
+                    else:
+                        # --- STANDARD LOGIC: Exact match (for everyone else) ---
+                        existing_values = set(raw_db_values)
+
+                    # D. Compare
+                    missing = [
+                        item for item in items if item not in existing_values]
+
+                    if missing:
+                        triggered = True
+                        detailed_msg = f"{message}<br><strong>New/Missing Items:</strong> {', '.join(missing)}"
+                        try:
+                            url = reverse(url_name)
+                            active_validations.append({
+                                'url': url,
+                                'name': display_name,
+                                'message': mark_safe(detailed_msg)
+                            })
+                        except Exception:
+                            pass
+                        break
+
+        if not triggered:
+            super().save_model(request, obj, form, change)
+        else:
+            # Pause save and trigger interception page
+            request._needs_interception = True
+            request._active_validations = active_validations
+
+    def response_add(self, request, obj, post_url_continue=None):
+        if getattr(request, '_needs_interception', False):
+            return self._build_interception_page(request)
+        return super().response_add(request, obj, post_url_continue)
+
+    def response_change(self, request, obj):
+        if getattr(request, '_needs_interception', False):
+            return self._build_interception_page(request)
+        return super().response_change(request, obj)
+
+    def _build_interception_page(self, request):
+        active_validations = getattr(request, '_active_validations', [])
+        validation_html = ""
+        for item in active_validations:
+            validation_html += f"""
+            <div class="validation-item">
+                <div class="validation-msg">{item['message']}</div>
+                <a href="{item['url']}" target="_blank" class="link-btn">
+                    🔗 Go to {item['name']}
+                </a>
+            </div>
+            """
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Verification Required</title>
+            <style>
+                body {{ font-family: -apple-system, system-ui, sans-serif; background: #f4f6f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }}
+                .card {{ background: white; padding: 40px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 600px; width: 100%; border-top: 6px solid #dc3545; }}
+                h2 {{ color: #dc3545; margin-top: 0; }}
+                .validation-item {{ background: #fff5f5; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 15px; text-align: left; }}
+                .validation-msg {{ color: #721c24; font-weight: 600; margin-bottom: 10px; }}
+                .link-btn {{ display: inline-block; padding: 6px 12px; background: #fff; color: #dc3545; text-decoration: none; border: 1px solid #dc3545; border-radius: 4px; font-size: 13px; font-weight: bold; }}
+                .link-btn:hover {{ background: #dc3545; color: white; }}
+                .back-btn {{ width: 100%; padding: 15px; background: #6c757d; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }}
+                .back-btn:hover {{ background: #5a6268; }}
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h2>⚠️ Verification Required</h2>
+                <p>You entered data that does not exist in the linked tables yet.</p>
+                {validation_html}
+                <button class="back-btn" onclick="window.history.back();">⬅ Go Back & Fix</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HttpResponse(html)
+
+
+# ==============================================================================
+# 1. ANALYSIS (Search: Name, Acronym)
+# ==============================================================================
+
+
+class AnalysisAdminForm(forms.ModelForm):
+    # Searchable Multi-Select Widgets for text-based relationships
+    tcm_diag_low = forms.MultipleChoiceField(
+        required=False, label="TCM Diagnosis (Low)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
+    tcm_diag_high = forms.MultipleChoiceField(
+        required=False, label="TCM Diagnosis (High)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
+    func_diag_low = forms.MultipleChoiceField(
+        required=False, label="Functional Med Diagnosis (Low)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
+    func_diag_high = forms.MultipleChoiceField(
+        required=False, label="Functional Med Diagnosis (High)", widget=forms.SelectMultiple(attrs=WIDGET_ATTRS))
+    # 1. TCM Diagnosis
+    tcm_diag_low = DynamicMultipleChoiceField(
+        required=False,
+        label="TCM Diagnosis (Low)",
+        widget=forms.SelectMultiple(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'  # <--- Allows typing new "Dummy" values
+        })
+    )
+    tcm_diag_high = DynamicMultipleChoiceField(
+        required=False,
+        label="TCM Diagnosis (High)",
+        widget=forms.SelectMultiple(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'
+        })
+    )
+
+    # 2. Functional Med Diagnosis
+    func_diag_low = DynamicMultipleChoiceField(
+        required=False,
+        label="Functional Med Diagnosis (Low)",
+        widget=forms.SelectMultiple(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'
+        })
+    )
+    func_diag_high = DynamicMultipleChoiceField(
+        required=False,
+        label="Functional Med Diagnosis (High)",
+        widget=forms.SelectMultiple(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'
+        })
+    )
+
+    # --- UPDATED: CharField + Select Widget + data-tags="true" ---
+    # This combination allows selection from list OR typing a new value.
+    func_panel_1 = forms.CharField(
+        required=False,
+        label="Functional Panel 1",
+        widget=forms.Select(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'  # <--- Allows creation of new values
+        })
+    )
+    func_panel_2 = forms.CharField(
+        required=False,
+        label="Functional Panel 2",
+        widget=forms.Select(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'
+        })
+    )
+    func_panel_3 = forms.CharField(
+        required=False,
+        label="Functional Panel 3",
+        widget=forms.Select(attrs={
+            'class': 'advanced-select',
+            'style': 'width: 100%',
+            'data-tags': 'true'
+        })
+    )
+
+    class Meta:
+        model = Analysis
+        fields = '__all__'
+
+    @property
+    def media(self):
+        return forms.Media(**SHARED_MEDIA)
+
+    def __init__(self, *args, **kwargs):
+        super(AnalysisAdminForm, self).__init__(*args, **kwargs)
+
+        # 1. Fetch Source Data for Diagnoses
+        patterns = list(Pattern.objects.values_list(
+            'tcm_patterns', flat=True).distinct().order_by('tcm_patterns'))
+        func_cats = list(FunctionalCategory.objects.values_list(
+            'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
+
+        # 2. Populate Widget Choices for Diagnoses
+        p_choices = [(p, p) for p in patterns if p]
+        f_choices = [(f, f) for f in func_cats if f]
+
+        self.fields['tcm_diag_low'].choices = p_choices
+        self.fields['tcm_diag_high'].choices = p_choices
+        self.fields['func_diag_low'].choices = f_choices
+        self.fields['func_diag_high'].choices = f_choices
+
+        # --- 3. UPDATED LOGIC: Populate Functional Panels ---
+        # Fetch unique values from ALL three columns to build a master list
+        p1 = list(Analysis.objects.values_list('func_panel_1', flat=True))
+        p2 = list(Analysis.objects.values_list('func_panel_2', flat=True))
+        p3 = list(Analysis.objects.values_list('func_panel_3', flat=True))
+
+        # Combine and remove duplicates/empties
+        all_panels = set(p1 + p2 + p3)
+        panel_choices = [('', '')] + sorted([(p, p) for p in all_panels if p])
+
+        # Assign choices to the WIDGET (since CharField doesn't have self.fields['x'].choices)
+        self.fields['func_panel_1'].widget.choices = panel_choices
+        self.fields['func_panel_2'].widget.choices = panel_choices
+        self.fields['func_panel_3'].widget.choices = panel_choices
+
+        # --- 4. Set Initial Values ---
+        instance = getattr(self, 'instance', None)
+        if instance and instance.pk:
+            # We pass a list of JUST the keys/values to helper
+            p_flat = [p for p in patterns if p]
+            f_flat = [f for f in func_cats if f]
+
+            self.initial['tcm_diag_low'] = get_initial_list(
+                instance.tcm_diag_low, p_flat)
+            self.initial['tcm_diag_high'] = get_initial_list(
+                instance.tcm_diag_high, p_flat)
+            self.initial['func_diag_low'] = get_initial_list(
+                instance.func_diag_low, f_flat)
+            self.initial['func_diag_high'] = get_initial_list(
+                instance.func_diag_high, f_flat)
+
+            # Ensure the current value is in the choices list (otherwise it disappears)
+            for field in ['func_panel_1', 'func_panel_2', 'func_panel_3']:
+                val = getattr(instance, field)
+                if val and val not in all_panels:
+                    self.fields[field].widget.choices.append((val, val))
+
+    # Save Logic: Convert List -> String
+    def clean_tcm_diag_low(self): return list_to_semicolon_string(
+        self.cleaned_data['tcm_diag_low'])
+
+    def clean_tcm_diag_high(self): return list_to_semicolon_string(
+        self.cleaned_data['tcm_diag_high'])
+
+    def clean_func_diag_low(self): return list_to_semicolon_string(
+        self.cleaned_data['func_diag_low'])
+    def clean_func_diag_high(self): return list_to_semicolon_string(
+        self.cleaned_data['func_diag_high'])
+# --- MODAL VALIDATION MIXIN (CLIENT-SIDE) ---
+
+
+# --- 1. CORE BLOOD MARKERS ---
+@admin.register(BloodMarkersProxy)
+class AnalysisAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    form = AnalysisAdminForm
+    # --- SMART VALIDATION MAPPING ---
+    # Format: ( [Fields], ModelClass, 'Lookup_Column', 'URL_Name', 'Page Name', 'Error Message' )
+    validation_map = [
+        (
+            ['tcm_diag_low', 'tcm_diag_high'],
+            Pattern,             # Target Model
+            'tcm_patterns',      # Column in Pattern model to check against
+            'admin:ui_core_patternproxy_changelist',
+            'TCM Patterns Page',
+            "You referenced a TCM Pattern that does not exist."
+        ),
+        (
+            ['func_diag_low', 'func_diag_high'],
+            FunctionalCategory,  # Target Model
+            'functional_medicine',  # Column to check
+            'admin:ui_core_functionalcategoryproxy_changelist',
+            'Functional Medicine Page',
+            "You referenced a Functional Diagnosis that does not exist."
+        ),
+        # You can add the Medication/Supplement checks here too if needed,
+        # but they are usually text fields in this form.
+    ]
+# --- DYNAMIC MAPPING CONFIGURATION ---
+    # # Format: ( [List of Fields], 'URL Name', 'Link Label' )
+    # validation_map = [
+    #     (
+    #         ['tcm_diag_low', 'tcm_diag_high'],
+    #         'admin:ui_core_patternproxy_changelist',
+    #         'TCM Patterns Page',
+    #         "You referenced a TCM Diagnosis. Please ensure this Pattern exists in the system."
+    #     ),
+    #     (
+    #         ['func_diag_low', 'func_diag_high'],
+    #         'admin:ui_core_functionalcategoryproxy_changelist',
+    #         'Functional Medicine Page',
+    #         "You referenced a Functional Diagnosis. Please ensure this Category exists in the system."
+    #     ),
+    #     (
+    #         ['med_types_low', 'med_types_high'],
+    #         'admin:ui_pharma_medicationmappingproxy_changelist',
+    #         'Medication Mapping Page',
+    #         "You added a Medication Type. Please check the Medication Mapping table."
+    #     ),
+    #     (
+    #         ['supp_types_low', 'supp_types_high'],
+    #         'admin:ui_pharma_supplementmappingproxy_changelist',
+    #         'Supplement Mapping Page',
+    #         "You added a Supplement Type. Please check the Supplement Mapping table."
+    #     )
+    # ]
+
+    # # 2. LINKS TO SHOW (Always show ALL of them if triggered)
+    # related_pages = [
+    #     ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page'),
+    #     ('admin:ui_core_functionalcategoryproxy_changelist',
+    #      'Functional Medicine Indications'),
+    #     ('admin:ui_pharma_medicationmappingproxy_changelist', 'Medication Mapping Page'),
+    #     ('admin:ui_pharma_supplementmappingproxy_changelist', 'Supplement Mapping Page')
+    # ]
+
+    # --- ADDED SEARCH FIELDS ---
+    search_fields = ('blood_test', 'blood_test_full',
+                     'blood_test_acronym', 'panel', 'units', 'units_interchangeable', 'severity', 'vital_marker')
+    # --- LIST DISPLAY UPDATED WITH CLICK WRAPPERS ---
+    list_display = (
+        'panel', 'blood_test', 'blood_test_full', 'blood_test_acronym',
+        'units', 'units_interchangeable', 'ideal_low', 'ideal_high',
+        'absence_low', 'absence_high', 'severity', 'vital_marker',
+
+        # Updated fields using the _click wrappers
+        'tcm_diag_low', 'tcm_diag_high',
+        'func_diag_low_click', 'func_diag_high_click',
+        'conv_diag_low_click', 'conv_diag_high_click',
+
+
+        'func_panel_1', 'func_panel_2', 'func_panel_3'
+    )
+    list_display_links = ('blood_test', 'panel',)
+
+    fieldsets = (
+
+        ('Blood Marker Identification', {
+            # Moved 'severity' here
+            'fields': ('panel', 'blood_test', 'blood_test_full', 'blood_test_acronym', 'vital_marker', 'severity')
+        }),
+        ('Units & Ranges', {  # Renamed from "Ranges & Severity"
+            # Moved 'units' and 'units_interchangeable' here
+            # Removed 'severity'
+            'fields': (
+                ('ideal_low', 'ideal_high'),
+                ('absence_low', 'absence_high'),
+                ('units', 'units_interchangeable')
+            )
+        }),
+        ('Medicine & TCM Diagnoses', {
+            'description': "Search and select multiple items.",
+            'fields': (
+                'tcm_diag_low', 'tcm_diag_high',
+                'func_diag_low', 'func_diag_high',
+            )
+        }),
+        ('Conventional Medicine Diagnoses', {
+            'fields': ('conv_diag_low', 'conv_diag_high')
+        }),
+        ('Functional Panels', {
+            'fields': ('func_panel_1', 'func_panel_2', 'func_panel_3')
+        }),
+        # Removed the separate 'Units' fieldset as it is now merged above
+    )
+    list_filter = ('panel', 'blood_test', 'severity', 'units',
+                   'units_interchangeable', 'severity', 'vital_marker')
+    list_per_page = 50
+    # --- HELPER FOR TOGGLING TEXT ---
+
+    def _create_click_to_open(self, text):
+        """
+        Creates a toggleable text field using simple JavaScript.
+        """
+        if not text:
+            return "-"
+
+        # If text is short, just show it
+        if len(text) <= 50:
+            return text
+
+        short_text = text[:50] + "..."
+
+        # Two divs: one for short view, one for full view.
+        return format_html(
+            '<div class="text-toggle-container">'
+            # -- SHORT VERSION (Click to Expand) --
+            '<div style="cursor:pointer; display:block;" '
+            'onclick="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">'
+            '<span>{}</span> '
+            '<span style="color:#447e9b; font-weight:bold;"> &#9662;</span>'  # Down Arrow
+            '</div>'
+
+            # -- FULL VERSION (Click to Collapse) --
+            '<div style="cursor:pointer; display:none;" '
+            'onclick="this.style.display=\'none\'; this.previousElementSibling.style.display=\'block\';">'
+            '<span>{}</span> '
+            '<span style="color:#447e9b; font-weight:bold;"> &#9652;</span>'  # Up Arrow
+            '</div>'
+            '</div>',
+            short_text,
+            text
+        )
+
+    @property
+    def media(self):
+        return forms.Media(**SHARED_MEDIA)
+
+    # --- WRAPPER METHODS ---
+
+    def func_diag_low_click(self, obj):
+        return self._create_click_to_open(obj.func_diag_low)
+    func_diag_low_click.short_description = "Functional Med Diagnosis (Low)"
+
+    def func_diag_high_click(self, obj):
+        return self._create_click_to_open(obj.func_diag_high)
+    func_diag_high_click.short_description = "Functional Med Diagnosis (High)"
+
+    def conv_diag_low_click(self, obj):
+        return self._create_click_to_open(obj.conv_diag_low)
+    conv_diag_low_click.short_description = "Conventional Med Diagnosis (Low)"
+
+    def conv_diag_high_click(self, obj):
+        return self._create_click_to_open(obj.conv_diag_high)
+    conv_diag_high_click.short_description = "Conventional Med Diagnosis (High)"
+
+    def organs_conv_func_click(self, obj):
+        return self._create_click_to_open(obj.organs_conv_func)
+    organs_conv_func_click.short_description = "Organs (Conv & Func)"
+
+    def organs_tcm_click(self, obj):
+        return self._create_click_to_open(obj.organs_tcm)
+    organs_tcm_click.short_description = "Organs (TCM)"
+
+    def possible_assoc_pathogens_click(self, obj):
+        return self._create_click_to_open(obj.possible_assoc_pathogens)
+    possible_assoc_pathogens_click.short_description = "Possible Assoc Pathogens"
 
 
 class PatternAdminForm(forms.ModelForm):
-    # (Keep your existing ChoiceFields for body types/pathogens here...)
-    # 1. Body Types
-    body_type_primary = forms.ChoiceField(
+    # 1. Body Types: Change to DynamicChoiceField
+    body_type_primary = DynamicChoiceField(
         required=False, label="TCM Body Type - Primary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    body_type_secondary = forms.ChoiceField(
+    body_type_secondary = DynamicChoiceField(
         required=False, label="TCM Body Type - Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    body_type_tertiary = forms.ChoiceField(
+    body_type_tertiary = DynamicChoiceField(
         required=False, label="TCM Body Type - Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
 
-    # 2. Pathogen
-    pathogenic_factor = forms.ChoiceField(
+    # 2. Pathogen: Change to DynamicChoiceField
+    pathogenic_factor = DynamicChoiceField(
         required=False, label="Pathogenic Factor", widget=forms.Select(attrs=WIDGET_ATTRS))
 
-    # 3. Excess/Deficiency
+    # 3. Excess/Deficiency (Keep as strict ChoiceField, these are hardcoded)
     excess_deficiency = forms.ChoiceField(
         choices=[
             ('', 'Select Type...'),
@@ -1086,7 +1331,6 @@ class PatternAdminForm(forms.ModelForm):
         model = Pattern
         fields = '__all__'
         widgets = {
-            # Attach the new Strict Widget
             'symptoms': StrictSemicolonListWidget(),
         }
 
@@ -1096,21 +1340,17 @@ class PatternAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(PatternAdminForm, self).__init__(*args, **kwargs)
 
-        # --- A. POPULATE SYMPTOMS (Strict List) ---
-        # 1. Fetch symptoms from SymptomCategory (only valid source)
+        # --- A. SYMPTOMS (Keep existing logic) ---
         symptom_pool = list(SymptomCategory.objects.exclude(symptoms__isnull=True)
                             .exclude(symptoms__exact='')
                             .values_list('symptoms', flat=True)
                             .distinct()
                             .order_by('symptoms'))
 
-        # 2. Pass choices to the widget
         if 'symptoms' in self.fields:
             self.fields['symptoms'].widget.data_choices = symptom_pool
 
-        # --- B. EXISTING LOGIC (Body Types, Pathogens, Middle/Bottom Groups) ---
-        # (Keep the rest of your logic exactly as it was)
-
+        # --- B. DYNAMIC MAPPINGS (Body Types & Pathogens) ---
         body_types = list(TCMBodyTypeMapping.objects.values_list(
             'tcm_body_type', flat=True).distinct())
         pathogens = list(TCMPathogenDefinition.objects.values_list(
@@ -1121,12 +1361,26 @@ class PatternAdminForm(forms.ModelForm):
         p_choices = [('', 'Select Pathogen...')] + [(p, p)
                                                     for p in pathogens if p]
 
+        # Assign choices
         self.fields['body_type_primary'].choices = bt_choices
         self.fields['body_type_secondary'].choices = bt_choices
         self.fields['body_type_tertiary'].choices = bt_choices
         self.fields['pathogenic_factor'].choices = p_choices
 
-        # --- Middle vs Bottom Groups Logic ---
+        # --- PRESERVE EXISTING DATA (If value is not in DB list, add it to choices so it shows up) ---
+        instance = getattr(self, 'instance', None)
+        if instance and instance.pk:
+            # Check Pathogen
+            if instance.pathogenic_factor and instance.pathogenic_factor not in pathogens:
+                self.fields['pathogenic_factor'].choices.append(
+                    (instance.pathogenic_factor, instance.pathogenic_factor))
+            # Check Body Types
+            for field in ['body_type_primary', 'body_type_secondary', 'body_type_tertiary']:
+                val = getattr(instance, field)
+                if val and val not in body_types:
+                    self.fields[field].choices.append((val, val))
+
+        # --- Middle vs Bottom Groups Logic (Keep existing) ---
         middle_group = ['middle_primary', 'middle_secondary',
                         'middle_tertiary', 'middle_quantery']
         bottom_group = ['bottom_primary', 'bottom_secondary']
@@ -1159,23 +1413,150 @@ class PatternAdminForm(forms.ModelForm):
                            'data-tags': 'true', 'data-placeholder': 'Select Bottom Category...'}
                 )
 
-        # Safety Check for existing values
-        instance = getattr(self, 'instance', None)
-        if instance and instance.pk:
-            all_target_fields = middle_group + bottom_group
-            for f_name in all_target_fields:
-                val = getattr(instance, f_name, None)
-                if val:
-                    existing_keys = [
-                        k for k, v in self.fields[f_name].widget.choices]
-                    if val not in existing_keys:
-                        self.fields[f_name].widget.choices.append((val, val))
+# class PatternAdminForm(forms.ModelForm):
+#     # (Keep your existing ChoiceFields for body types/pathogens here...)
+#     # 1. Body Types
+#     body_type_primary = forms.ChoiceField(
+#         required=False, label="TCM Body Type - Primary", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     body_type_secondary = forms.ChoiceField(
+#         required=False, label="TCM Body Type - Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     body_type_tertiary = forms.ChoiceField(
+#         required=False, label="TCM Body Type - Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
+
+#     # 2. Pathogen
+#     pathogenic_factor = forms.ChoiceField(
+#         required=False, label="Pathogenic Factor", widget=forms.Select(attrs=WIDGET_ATTRS))
+
+#     # 3. Excess/Deficiency
+#     excess_deficiency = forms.ChoiceField(
+#         choices=[
+#             ('', 'Select Type...'),
+#             ('Excess', 'Excess'),
+#             ('Deficiency', 'Deficiency'),
+#             ('General', 'General')
+#         ],
+#         required=False,
+#         label="Excess/Deficiency/General",
+#         widget=forms.Select(attrs=WIDGET_ATTRS)
+#     )
+
+#     class Meta:
+#         model = Pattern
+#         fields = '__all__'
+#         widgets = {
+#             # Attach the new Strict Widget
+#             'symptoms': StrictSemicolonListWidget(),
+#         }
+
+#     @property
+#     def media(self): return forms.Media(**SHARED_MEDIA)
+
+#     def __init__(self, *args, **kwargs):
+#         super(PatternAdminForm, self).__init__(*args, **kwargs)
+
+#         # --- A. POPULATE SYMPTOMS (Strict List) ---
+#         # 1. Fetch symptoms from SymptomCategory (only valid source)
+#         symptom_pool = list(SymptomCategory.objects.exclude(symptoms__isnull=True)
+#                             .exclude(symptoms__exact='')
+#                             .values_list('symptoms', flat=True)
+#                             .distinct()
+#                             .order_by('symptoms'))
+
+#         # 2. Pass choices to the widget
+#         if 'symptoms' in self.fields:
+#             self.fields['symptoms'].widget.data_choices = symptom_pool
+
+#         # --- B. EXISTING LOGIC (Body Types, Pathogens, Middle/Bottom Groups) ---
+#         # (Keep the rest of your logic exactly as it was)
+
+#         body_types = list(TCMBodyTypeMapping.objects.values_list(
+#             'tcm_body_type', flat=True).distinct())
+#         pathogens = list(TCMPathogenDefinition.objects.values_list(
+#             'pathogen', flat=True).distinct())
+
+#         bt_choices = [('', 'Select Body Type...')] + [(b, b)
+#                                                       for b in body_types if b]
+#         p_choices = [('', 'Select Pathogen...')] + [(p, p)
+#                                                     for p in pathogens if p]
+
+#         self.fields['body_type_primary'].choices = bt_choices
+#         self.fields['body_type_secondary'].choices = bt_choices
+#         self.fields['body_type_tertiary'].choices = bt_choices
+#         self.fields['pathogenic_factor'].choices = p_choices
+
+#         # --- Middle vs Bottom Groups Logic ---
+#         middle_group = ['middle_primary', 'middle_secondary',
+#                         'middle_tertiary', 'middle_quantery']
+#         bottom_group = ['bottom_primary', 'bottom_secondary']
+
+#         def get_pooled_choices(column_names):
+#             pool = set()
+#             for col in column_names:
+#                 values = Pattern.objects.values_list(col, flat=True).distinct()
+#                 for val in values:
+#                     if val:
+#                         pool.add(val)
+#             return [('', '')] + [(v, v) for v in sorted(list(pool))]
+
+#         middle_choices = get_pooled_choices(middle_group)
+#         bottom_choices = get_pooled_choices(bottom_group)
+
+#         for f_name in middle_group:
+#             if f_name in self.fields:
+#                 self.fields[f_name].widget = forms.Select(
+#                     choices=middle_choices,
+#                     attrs={'class': 'advanced-select', 'style': 'width: 100%',
+#                            'data-tags': 'true', 'data-placeholder': 'Select Middle Category...'}
+#                 )
+
+#         for f_name in bottom_group:
+#             if f_name in self.fields:
+#                 self.fields[f_name].widget = forms.Select(
+#                     choices=bottom_choices,
+#                     attrs={'class': 'advanced-select', 'style': 'width: 100%',
+#                            'data-tags': 'true', 'data-placeholder': 'Select Bottom Category...'}
+#                 )
+
+#         # Safety Check for existing values
+#         instance = getattr(self, 'instance', None)
+#         if instance and instance.pk:
+#             all_target_fields = middle_group + bottom_group
+#             for f_name in all_target_fields:
+#                 val = getattr(instance, f_name, None)
+#                 if val:
+#                     existing_keys = [
+#                         k for k, v in self.fields[f_name].widget.choices]
+#                     if val not in existing_keys:
+#                         self.fields[f_name].widget.choices.append((val, val))
 
 
-@admin.register(Pattern)
-class PatternAdmin(admin.ModelAdmin):
+@admin.register(PatternProxy)
+class PatternAdmin(RemindUpdateMixin, admin.ModelAdmin):
+
     # --- 2. CONNECT THE FORM ---
     form = PatternAdminForm
+# --- SMART VALIDATION MAPPING ---
+    # Format: ([Fields], TargetModel, 'Lookup_Column', 'URL_Name', 'Link Text', 'Error Message')
+    validation_map = [
+        # 1. Check Pathogens
+        (
+            ['pathogenic_factor'],
+            TCMPathogenDefinition,  # The model to check against
+            'pathogen',             # The column in that model
+            'admin:ui_core_tcmpathogenproxy_changelist',  # Link to the Proxy Admin
+            'Pathogens Page',
+            "You added a Pathogen that doesn't exist yet."
+        ),
+        # 2. Check Body Types (Primary, Secondary, Tertiary)
+        (
+            ['body_type_primary', 'body_type_secondary', 'body_type_tertiary'],
+            TCMBodyTypeMapping,     # The model to check against
+            'tcm_body_type',        # The column in that model
+            'admin:ui_core_tcmbodytypeproxy_changelist',  # Link to the Proxy Admin
+            'Body Types Page',
+            "You added a Body Type that doesn't exist yet."
+        )
+    ]
 
     search_fields = ('tcm_patterns', 'modern_description',
                      'middle_primary', 'pathogenic_factor', 'symptoms')
@@ -1257,34 +1638,12 @@ class PatternAdmin(admin.ModelAdmin):
     # def rationale_click(self, obj):
     #     return self._create_click_to_open(obj.rationale)
     # rationale_click.short_description = "Rationale"
+
 # ==============================================================================
 # 3. FUNCTIONAL & SYMPTOMS (Formatting Enforced)
 # ==============================================================================
 
 # --- Helper to format string "A, B, C" into "A, B and C" ---
-
-
-def format_list_string(value):
-    if not value:
-        return value
-
-    # 1. Split the input string by commas to get individual items
-    #    (We also replace ' and ' with ',' just in case the user typed it manually)
-    items = [item.strip() for item in value.replace(
-        ' and ', ',').split(',') if item.strip()]
-
-    count = len(items)
-
-    if count == 0:
-        return ""
-    if count == 1:
-        return items[0]
-    if count == 2:
-        return f"{items[0]} and {items[1]}"
-
-    # For 3 or more: join all except last with commas, then add ' and ' before the last
-    main_part = ", ".join(items[:-1])
-    return f"{main_part} and {items[-1]}"
 
 
 class FunctionalCategoryAdminForm(forms.ModelForm):
@@ -1347,29 +1706,21 @@ class FunctionalCategoryAdminForm(forms.ModelForm):
         return list_to_oxford_string(self.cleaned_data['secondary_category'])
 
 
-# class FunctionalCategoryAdminForm(forms.ModelForm):
-#     class Meta:
-#         model = FunctionalCategory
-#         fields = '__all__'
-#         # Add help text so you know the format is being applied
-#         help_texts = {
-#             'primary_category': 'Enter items separated by commas (e.g., "Sleep, Stress"). System will auto-format to "Sleep and Stress".',
-#             'secondary_category': 'Enter items separated by commas. System will auto-format to "A, B and C".',
-#         }
-
-#     def clean_primary_category(self):
-#         # Auto-format the input before saving to DB
-#         return format_list_string(self.cleaned_data['primary_category'])
-
-#     def clean_secondary_category(self):
-#         # Auto-format the input before saving to DB
-#         return format_list_string(self.cleaned_data['secondary_category'])
-
-
-@admin.register(FunctionalCategory)
-class FunctionalCategoryAdmin(admin.ModelAdmin):
+@admin.register(FunctionalCategoryProxy)
+class FunctionalCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = FunctionalCategoryAdminForm  # <--- Connect the custom form here
-
+# --- REQUIREMENT C MAPPING: Functional Med -> Blood Markers ---
+    validation_map = [
+        (
+            ['functional_medicine'],
+            'admin:ui_core_bloodmarkersproxy_changelist',
+            'Blood Markers Page',
+            "You modified a Functional Category Name. Please ensure Blood Markers referencing this are updated."
+        )
+    ]
+    related_pages = [
+        ('admin:ui_core_bloodmarkersproxy_changelist', 'Blood Markers Page')
+    ]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('functional_medicine',
                      'primary_category', 'secondary_category')
@@ -1379,56 +1730,155 @@ class FunctionalCategoryAdmin(admin.ModelAdmin):
 
     # --- EXISTING STRUCTURE PRESERVED ---
     list_display = ('functional_medicine',
+
                     'primary_category', 'secondary_category')
 
-
-class SymptomCategoryAdminForm(forms.ModelForm):
-    # Lookup for Functional Category
-    primary_category = forms.ChoiceField(
-        required=False, widget=forms.Select(attrs=WIDGET_ATTRS))
-
-    class Meta:
-        model = SymptomCategory
-        fields = '__all__'
-
     @property
     def media(self): return forms.Media(**SHARED_MEDIA)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Load Categories from FunctionalCategory model
-        cats = list(FunctionalCategory.objects.values_list(
-            'functional_medicine', flat=True).distinct())
-        self.fields['primary_category'].choices = [
-            ('', 'Select Category...')] + [(c, c) for c in cats if c]
+
+# class SymptomCategoryAdminForm(forms.ModelForm):
+#     # 1. Selector for Symptoms (Source: Pattern model)
+#     symptoms = forms.ChoiceField(
+#         required=False,
+#         label="Symptom (from Patterns)",
+#         widget=forms.Select(attrs=WIDGET_ATTRS)
+#     )
+
+#     class Meta:
+#         model = SymptomCategory
+#         fields = '__all__'
+
+#     @property
+#     def media(self):
+#         return forms.Media(**SHARED_MEDIA)
+
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#         # --- A. Populate SYMPTOMS from Pattern model ---
+#         # 1. Fetch all raw symptom strings (e.g., "Headache; Nausea")
+#         raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
+
+#         # 2. Parse and Flatten: Split by ';', strip whitespace, and uniquify
+#         unique_symptoms = set()
+#         for entry in raw_pattern_data:
+#             if entry:
+#                 # Split by semicolon and clean up whitespace
+#                 parts = [x.strip() for x in entry.split(';') if x.strip()]
+#                 unique_symptoms.update(parts)
+
+#         # 3. Sort and Create Choices
+#         sorted_symptoms = sorted(list(unique_symptoms))
+#         symptom_choices = [('', 'Select Symptom...')] + [(s, s)
+#                                                          for s in sorted_symptoms]
+
+#         # 4. Assign to field
+#         self.fields['symptoms'].choices = symptom_choices
+
+#         # --- B. Populate CATEGORIES from FunctionalCategory model ---
+#         cats = list(FunctionalCategory.objects.values_list(
+#             'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
+
+#         cat_choices = [('', 'Select Category...')] + [(c, c)
+#                                                       for c in cats if c]
+#         self.fields['primary_category'].choices = cat_choices
+
+#         # --- C. Set Initial Values for Edit Mode ---
+#         instance = getattr(self, 'instance', None)
+#         if instance and instance.pk:
+#             # If the current value isn't in the list (e.g. custom text), add it to prevent data loss
+#             current_sym = instance.symptoms
+#             if current_sym and current_sym not in unique_symptoms:
+#                 self.fields['symptoms'].choices.append(
+#                     (current_sym, current_sym))
+
+#             current_cat = instance.primary_category
+#             if current_cat and current_cat not in cats:
+#                 self.fields['primary_category'].choices.append(
+#                     (current_cat, current_cat))
+
+
+# class SymptomCategoryAdminForm(forms.ModelForm):
+#     # 1. Symptoms (Source: Pattern model) - Keep as DynamicChoiceField to allow new ones
+#     symptoms = DynamicChoiceField(
+#         required=False,
+#         label="Symptom (from Patterns)",
+#         widget=forms.Select(attrs=WIDGET_ATTRS)
+#     )
+
+#     # 2. Primary Category (Source: FunctionalCategory) - Change to DynamicChoiceField
+#     primary_category = DynamicChoiceField(
+#         required=False,
+#         label="Primary Category",
+#         widget=forms.Select(attrs=WIDGET_ATTRS)
+#     )
+
+#     class Meta:
+#         model = SymptomCategory
+#         fields = '__all__'
+
+#     @property
+#     def media(self):
+#         return forms.Media(**SHARED_MEDIA)
+
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#         # --- A. SYMPTOMS ---
+#         raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
+#         unique_symptoms = set()
+#         for entry in raw_pattern_data:
+#             if entry:
+#                 parts = [x.strip() for x in entry.split(';') if x.strip()]
+#                 unique_symptoms.update(parts)
+
+#         sorted_symptoms = sorted(list(unique_symptoms))
+#         symptom_choices = [('', 'Select Symptom...')] + [(s, s)
+#                                                          for s in sorted_symptoms]
+#         self.fields['symptoms'].choices = symptom_choices
+
+#         # --- B. CATEGORIES ---
+#         cats = list(FunctionalCategory.objects.values_list(
+#             'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
+
+#         cat_choices = [('', 'Select Category...')] + [(c, c)
+#                                                       for c in cats if c]
+#         self.fields['primary_category'].choices = cat_choices
+
+#         # --- C. PRESERVE DATA ---
+#         instance = getattr(self, 'instance', None)
+#         if instance and instance.pk:
+#             current_sym = instance.symptoms
+#             if current_sym and current_sym not in unique_symptoms:
+#                 self.fields['symptoms'].choices.append(
+#                     (current_sym, current_sym))
+
+#             current_cat = instance.primary_category
+#             if current_cat and current_cat not in cats:
+#                 self.fields['primary_category'].choices.append(
+#                     (current_cat, current_cat))
 
 
 class SymptomCategoryAdminForm(forms.ModelForm):
-    # Lookup for Functional Category
-    primary_category = forms.ChoiceField(
-        required=False, widget=forms.Select(attrs=WIDGET_ATTRS))
-
-    class Meta:
-        model = SymptomCategory
-        fields = '__all__'
-
-    @property
-    def media(self): return forms.Media(**SHARED_MEDIA)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Load Categories from FunctionalCategory model
-        cats = list(FunctionalCategory.objects.values_list(
-            'functional_medicine', flat=True).distinct())
-        self.fields['primary_category'].choices = [
-            ('', 'Select Category...')] + [(c, c) for c in cats if c]
-
-
-class SymptomCategoryAdminForm(forms.ModelForm):
-    # 1. Selector for Symptoms (Source: Pattern model)
-    symptoms = forms.ChoiceField(
+    # 1. Symptoms: Allow typing (Source: Pattern model)
+    symptoms = DynamicChoiceField(
         required=False,
         label="Symptom (from Patterns)",
+        widget=forms.Select(attrs=WIDGET_ATTRS)
+    )
+
+    # 2. Primary Category: Allow typing
+    primary_category = DynamicChoiceField(
+        required=False,
+        label="Primary Category",
+        widget=forms.Select(attrs=WIDGET_ATTRS)
+    )
+
+    # 3. Secondary Category: Allow typing (NEW)
+    secondary_category = DynamicChoiceField(
+        required=False,
+        label="Secondary Category",
         widget=forms.Select(attrs=WIDGET_ATTRS)
     )
 
@@ -1443,52 +1893,73 @@ class SymptomCategoryAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # --- A. Populate SYMPTOMS from Pattern model ---
-        # 1. Fetch all raw symptom strings (e.g., "Headache; Nausea")
+        # --- A. SYMPTOMS (From Pattern) ---
         raw_pattern_data = Pattern.objects.values_list('symptoms', flat=True)
-
-        # 2. Parse and Flatten: Split by ';', strip whitespace, and uniquify
         unique_symptoms = set()
         for entry in raw_pattern_data:
             if entry:
-                # Split by semicolon and clean up whitespace
+                # Split by semicolon to get individual symptoms
                 parts = [x.strip() for x in entry.split(';') if x.strip()]
                 unique_symptoms.update(parts)
 
-        # 3. Sort and Create Choices
         sorted_symptoms = sorted(list(unique_symptoms))
         symptom_choices = [('', 'Select Symptom...')] + [(s, s)
                                                          for s in sorted_symptoms]
-
-        # 4. Assign to field
         self.fields['symptoms'].choices = symptom_choices
 
-        # --- B. Populate CATEGORIES from FunctionalCategory model ---
+        # --- B. CATEGORIES (From FunctionalCategory) ---
         cats = list(FunctionalCategory.objects.values_list(
             'functional_medicine', flat=True).distinct().order_by('functional_medicine'))
 
         cat_choices = [('', 'Select Category...')] + [(c, c)
                                                       for c in cats if c]
-        self.fields['primary_category'].choices = cat_choices
 
-        # --- C. Set Initial Values for Edit Mode ---
+        # Apply choices to BOTH Primary and Secondary
+        self.fields['primary_category'].choices = cat_choices
+        self.fields['secondary_category'].choices = cat_choices
+
+        # --- C. PRESERVE DATA (If current value is custom) ---
         instance = getattr(self, 'instance', None)
         if instance and instance.pk:
-            # If the current value isn't in the list (e.g. custom text), add it to prevent data loss
+            # Preserve Symptom
             current_sym = instance.symptoms
             if current_sym and current_sym not in unique_symptoms:
                 self.fields['symptoms'].choices.append(
                     (current_sym, current_sym))
 
+            # Preserve Primary Category
             current_cat = instance.primary_category
             if current_cat and current_cat not in cats:
                 self.fields['primary_category'].choices.append(
                     (current_cat, current_cat))
 
+            # Preserve Secondary Category
+            current_sec = instance.secondary_category
+            if current_sec and current_sec not in cats:
+                self.fields['secondary_category'].choices.append(
+                    (current_sec, current_sec))
 
-@admin.register(SymptomCategory)
-class SymptomCategoryAdmin(admin.ModelAdmin):
+
+@admin.register(SymptomCategoryProxy)
+class SymptomCategoryAdmin(RemindUpdateMixin, admin.ModelAdmin):
+
     form = SymptomCategoryAdminForm
+    # --- REQUIREMENT C MAPPING: Symptoms -> TCM Patterns ---
+# --- SMART VALIDATION MAPPING ---
+# --- SMART VALIDATION MAPPING ---
+    validation_map = [
+        # 1. CHECK SYMPTOMS (Against TCM Patterns)
+        (
+            ['symptoms'],
+            Pattern,                     # Target Model
+            'symptoms',                  # Target Column ("Headache; Fever")
+            'admin:ui_core_patternproxy_changelist',
+            'TCM Patterns Page',
+            "This symptom does not appear in any TCM Pattern yet.",
+            ';'                          # <--- DELIMITER (Splits DB string)
+        ),
+
+    ]
 
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('symptoms', 'primary_category', 'secondary_category')
@@ -1496,100 +1967,24 @@ class SymptomCategoryAdmin(admin.ModelAdmin):
     # --- EXISTING STRUCTURE PRESERVED ---
     list_display = ('symptoms', 'primary_category', 'secondary_category')
     list_filter = ('symptoms', 'primary_category', 'secondary_category')
-
-# ==============================================================================
-# 4. MEDICAL CONDITIONS (Search: Name | Select: Pattern, Category)
-# ==============================================================================
-
-
-# class MedicalConditionAdminForm(forms.ModelForm):
-#     # 1. Searchable Multi-Select for Patterns
-#     tcm_patterns = forms.MultipleChoiceField(
-#         required=False,
-#         label="TCM Patterns",
-#         widget=forms.SelectMultiple(attrs=WIDGET_ATTRS)
-#     )
-
-#     # # 2. Searchable Single-Selects for ALL Category Levels
-#     # primary_category = forms.ChoiceField(
-#     #     required=False,
-#     #     label="Primary Category",
-#     #     widget=forms.Select(attrs=WIDGET_ATTRS)
-#     # )
-#     # secondary_category = forms.ChoiceField(
-#     #     required=False,
-#     #     label="Secondary Category",
-#     #     widget=forms.Select(attrs=WIDGET_ATTRS)
-#     # )
-#     # tertiary_category = forms.ChoiceField(
-#     #     required=False,
-#     #     label="Tertiary Category",
-#     #     widget=forms.Select(attrs=WIDGET_ATTRS)
-#     # )
-
-#     class Meta:
-#         model = MedicalCondition
-#         fields = '__all__'
-
-#     @property
-#     def media(self): return forms.Media(**SHARED_MEDIA)
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # --- LOGIC TO FIX "MISSING CATEGORIES" & PREVENT CRASH ---
-
-#         # A. Fetch the Master List
-#         master_cats = set(FunctionalCategory.objects.values_list(
-#             'functional_medicine', flat=True))
-
-#         # B. Fetch currently used categories (including those NOT in master list)
-#         used_p = set(MedicalCondition.objects.values_list(
-#             'primary_category', flat=True))
-#         used_s = set(MedicalCondition.objects.values_list(
-#             'secondary_category', flat=True))
-#         used_t = set(MedicalCondition.objects.values_list(
-#             'tertiary_category', flat=True))
-
-#         # C. Combine all sets
-#         combined_set = master_cats | used_p | used_s | used_t
-
-#         # D. Filter out None/Empty values BEFORE sorting
-#         # This fixes the "TypeError: '<' not supported between instances of 'NoneType' and 'str'"
-#         all_possible_cats = sorted([cat for cat in combined_set if cat])
-
-#         # E. Create Choices
-#         cat_choices = [('', 'Select Category...')] + [(c, c)
-#                                                       for c in all_possible_cats]
-
-#         # F. Assign to fields
-#         self.fields['primary_category'].choices = cat_choices
-#         self.fields['secondary_category'].choices = cat_choices
-#         self.fields['tertiary_category'].choices = cat_choices
-
-#         # --- PATTERN LOGIC ---
-#         patterns = list(Pattern.objects.values_list(
-#             'tcm_patterns', flat=True).distinct().order_by('tcm_patterns'))
-#         # Filter out empty patterns to be safe
-#         self.fields['tcm_patterns'].choices = [(p, p) for p in patterns if p]
-
-#         # Initial Value for Patterns
-#         instance = getattr(self, 'instance', None)
-#         if instance and instance.pk:
-#             p_flat = [p for p in patterns if p]
-#             self.initial['tcm_patterns'] = get_initial_list(
-#                 instance.tcm_patterns, p_flat)
-
-#     def clean_tcm_patterns(self):
-#         return list_to_semicolon_string(self.cleaned_data['tcm_patterns'])
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
 
 class MedicalConditionAdminForm(forms.ModelForm):
     # Standard Pattern Field (Existing)
-    tcm_patterns = forms.MultipleChoiceField(
+    # tcm_patterns = forms.MultipleChoiceField(
+    #     required=False,
+    #     label="TCM Patterns",
+    #     widget=forms.SelectMultiple(attrs=WIDGET_ATTRS)
+    # )
+    # Change to DynamicMultipleChoiceField to allow NEW Patterns
+    tcm_patterns = DynamicMultipleChoiceField(
         required=False,
         label="TCM Patterns",
-        widget=forms.SelectMultiple(attrs=WIDGET_ATTRS)
+        widget=forms.SelectMultiple(attrs={
+            'class': 'advanced-select', 'style': 'width: 100%', 'data-tags': 'true'
+        })
     )
 
     # Categories (New Logic)
@@ -1685,9 +2080,21 @@ class MedicalConditionAdminForm(forms.ModelForm):
         return list_to_oxford_string(self.cleaned_data['tertiary_category'])
 
 
-@admin.register(MedicalCondition)
-class MedicalConditionAdmin(admin.ModelAdmin):
+@admin.register(MedicalConditionProxy)
+class MedicalConditionAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = MedicalConditionAdminForm
+# --- SMART VALIDATION MAPPING ---
+    validation_map = [
+        # 1. Check TCM Patterns
+        (
+            ['tcm_patterns'],
+            Pattern,                # Target Model
+            'tcm_patterns',         # Target Column
+            'admin:ui_core_patternproxy_changelist',
+            'TCM Patterns Page',
+            "You referenced a TCM Pattern that doesn't exist."
+        ),
+    ]
 
     # --- ADDED SEARCH FIELDS ---
     search_fields = (
@@ -1710,13 +2117,19 @@ class MedicalConditionAdmin(admin.ModelAdmin):
     list_display_links = ('condition',)
     list_filter = ('condition', 'primary_category', )
     list_per_page = 50
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
 
 # ==============================================================================
 # 5. WBC GLOSSARY & MATRIX (Search Enabled)
 # ==============================================================================
-@admin.register(WBCGlossary)
-class WBCGlossaryAdmin(admin.ModelAdmin):
+@admin.register(WBCGlossaryProxy)
+class WBCGlossaryAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: WBC Glossary -> WBC Matrix ---
+    related_pages = [
+        ('admin:ui_wbc_wbcmatrixproxy_changelist', 'WBC Matrix Page')
+    ]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('term', 'definition', 'next_steps')
 
@@ -1726,19 +2139,75 @@ class WBCGlossaryAdmin(admin.ModelAdmin):
     list_filter = ('term',)
     list_display_links = ('term',)
     list_per_page = 50
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
+
+# class WBCMatrixAdminForm(forms.ModelForm):
+#     # Use ChoiceFields for the Interpretation Hierarchy so they select from WBCGlossary
+#     primary_int = forms.ChoiceField(
+#         required=False, label="Primary Interpretation", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     secondary = forms.ChoiceField(
+#         required=False, label="Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     tertiary = forms.ChoiceField(
+#         required=False, label="Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     quaternary = forms.ChoiceField(
+#         required=False, label="Quaternary", widget=forms.Select(attrs=WIDGET_ATTRS))
+#     quinary = forms.ChoiceField(
+#         required=False, label="Quinary", widget=forms.Select(attrs=WIDGET_ATTRS))
+
+#     class Meta:
+#         model = WBCMatrix
+#         fields = '__all__'
+
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+
+#         # 1. Fetch Terms from WBCGlossary
+#         terms = list(WBCGlossary.objects.values_list(
+#             'term', flat=True).distinct().order_by('term'))
+
+#         # 2. Create Choices List
+#         term_choices = [('', 'Select Term...')] + [(t, t) for t in terms if t]
+
+#         # 3. Assign choices to the fields
+#         self.fields['primary_int'].choices = term_choices
+#         self.fields['secondary'].choices = term_choices
+#         self.fields['tertiary'].choices = term_choices
+#         self.fields['quaternary'].choices = term_choices
+#         self.fields['quinary'].choices = term_choices
+
+#         # 4. Set Initial Values (if editing an existing record)
+#         instance = getattr(self, 'instance', None)
+#         if instance and instance.pk:
+#             current_values = [
+#                 instance.primary_int, instance.secondary, instance.tertiary,
+#                 instance.quaternary, instance.quinary
+#             ]
+#             for val in current_values:
+#                 if val and val not in terms:
+#                     term_choices.append((val, val))
+
+#             self.fields['primary_int'].choices = term_choices
+#             self.fields['secondary'].choices = term_choices
+#             self.fields['tertiary'].choices = term_choices
+#             self.fields['quaternary'].choices = term_choices
+#             self.fields['quinary'].choices = term_choices
+
+#     @property
+#     def media(self): return forms.Media(**SHARED_MEDIA)
 
 class WBCMatrixAdminForm(forms.ModelForm):
-    # Use ChoiceFields for the Interpretation Hierarchy so they select from WBCGlossary
-    primary_int = forms.ChoiceField(
+    # Change ALL to DynamicChoiceField
+    primary_int = DynamicChoiceField(
         required=False, label="Primary Interpretation", widget=forms.Select(attrs=WIDGET_ATTRS))
-    secondary = forms.ChoiceField(
+    secondary = DynamicChoiceField(
         required=False, label="Secondary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    tertiary = forms.ChoiceField(
+    tertiary = DynamicChoiceField(
         required=False, label="Tertiary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    quaternary = forms.ChoiceField(
+    quaternary = DynamicChoiceField(
         required=False, label="Quaternary", widget=forms.Select(attrs=WIDGET_ATTRS))
-    quinary = forms.ChoiceField(
+    quinary = DynamicChoiceField(
         required=False, label="Quinary", widget=forms.Select(attrs=WIDGET_ATTRS))
 
     class Meta:
@@ -1748,57 +2217,42 @@ class WBCMatrixAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # 1. Fetch Terms from WBCGlossary
         terms = list(WBCGlossary.objects.values_list(
             'term', flat=True).distinct().order_by('term'))
-
-        # 2. Create Choices List
         term_choices = [('', 'Select Term...')] + [(t, t) for t in terms if t]
 
-        # 3. Assign choices to the fields
         self.fields['primary_int'].choices = term_choices
         self.fields['secondary'].choices = term_choices
         self.fields['tertiary'].choices = term_choices
         self.fields['quaternary'].choices = term_choices
         self.fields['quinary'].choices = term_choices
 
-        # 4. Set Initial Values (if editing an existing record)
+        # Check existing values and add them if missing
         instance = getattr(self, 'instance', None)
         if instance and instance.pk:
-            current_values = [
-                instance.primary_int, instance.secondary, instance.tertiary,
-                instance.quaternary, instance.quinary
-            ]
-            for val in current_values:
+            for field in ['primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary']:
+                val = getattr(instance, field)
                 if val and val not in terms:
-                    term_choices.append((val, val))
+                    self.fields[field].choices.append((val, val))
 
-            self.fields['primary_int'].choices = term_choices
-            self.fields['secondary'].choices = term_choices
-            self.fields['tertiary'].choices = term_choices
-            self.fields['quaternary'].choices = term_choices
-            self.fields['quinary'].choices = term_choices
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
 
-# # --- 1. DEFINE THE CUSTOM FORM ---
-# class WBCMatrixAdminForm(forms.ModelForm):
-#     # Override risk_score to be a dropdown (1-5)
-#     risk_score = forms.ChoiceField(
-#         choices=[(None, 'Select Score')] + [(i, str(i)) for i in range(1, 6)],
-#         required=False,
-#         label="Risk Score",
-#         # Matches your other widgets
-#         widget=forms.Select(attrs={'style': 'width: 100%'})
-#     )
-
-#     class Meta:
-#         model = WBCMatrix
-#         fields = '__all__'
-
-
-@admin.register(WBCMatrix)
-class WBCMatrixAdmin(admin.ModelAdmin):
+@admin.register(WBCMatrixProxy)
+class WBCMatrixAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = WBCMatrixAdminForm
+    validation_map = [
+        # Check: WBC Glossary Terms
+        (
+            ['primary_int', 'secondary', 'tertiary', 'quaternary', 'quinary'],
+            WBCGlossary,                 # Target Model
+            'term',                      # Target Column
+            'admin:ui_wbc_wbcglossaryproxy_changelist',
+            'WBC Glossary',
+            "You used a Term that is not defined in the WBC Glossary."
+        )
+    ]
 
     # --- SEARCH FIELDS ---
     search_fields = ('wbc', 'primary_int', 'rationale', 'clinical_guidance')
@@ -1899,9 +2353,10 @@ class WBCMatrixAdmin(admin.ModelAdmin):
 
     # --- UPDATED CSS FOR COMPACT UI ---
     class Media:
-        css = {
-            'all': ('admin/css/admin_enhanced.css',)
-        }
+        js = SHARED_MEDIA['js']
+        # css = {
+        #     'all': ('admin/css/admin_enhanced.css',)
+        # }
         # Generalized CSS to fix ALL rows (WBC, Risk Score, Confidence, etc.)
         extra = '''
             <style>
@@ -1965,70 +2420,27 @@ class MappingAdminFormBase(forms.ModelForm):
                                                       for m in markers if m]
         self.fields['marker'].choices = choices
 
+# class MappingAdminFormBase(forms.ModelForm):
+#     # Change to DynamicChoiceField
+#     marker = DynamicChoiceField(
+#         required=False, label="Target Blood Marker", widget=forms.Select(attrs=WIDGET_ATTRS))
 
-# class MedicationMappingAdminForm(MappingAdminFormBase):
-#     class Meta:
-#         model = MedicationMapping
-#         fields = '__all__'
-#         widgets = {
-#             'magnitude_low': forms.HiddenInput(),
-#             'magnitude_high': forms.HiddenInput(),
-#         }
+#     @property
+#     def media(self): return forms.Media(**SHARED_MEDIA)
 
 #     def __init__(self, *args, **kwargs):
 #         super().__init__(*args, **kwargs)
+#         markers = list(Analysis.objects.values_list(
+#             'blood_test', flat=True).distinct().order_by('blood_test'))
 
-#         # 1. Fetch sub-categories from MedicationList
-#         med_choices = list(MedicationList.objects.exclude(sub_category__isnull=True)
-#                            .values_list('sub_category', flat=True)
-#                            .distinct().order_by('sub_category'))
+#         # Protect existing value if not in list
+#         instance = getattr(self, 'instance', None)
+#         if instance and instance.marker and instance.marker not in markers:
+#             markers.append(instance.marker)
 
-#         # 2. Dynamically assign widgets with choices
-#         self.fields['med_types_low'].widget = PairedSemicolonWidget(
-#             magnitude_field_name='magnitude_low',
-#             label_text="Medication Type",
-#             choices=med_choices
-#         )
-#         self.fields['med_types_high'].widget = PairedSemicolonWidget(
-#             magnitude_field_name='magnitude_high',
-#             label_text="Medication Type",
-#             choices=med_choices
-#         )
-
-
-# class MedicationMappingAdminForm(MappingAdminFormBase):
-#     class Meta:
-#         model = MedicationMapping
-#         fields = '__all__'
-#         widgets = {
-#             # Attach the custom widget to the "Types" fields.
-#             # We tell it which field name holds the magnitude numbers.
-#             'med_types_low': PairedSemicolonWidget(magnitude_field_name='magnitude_low'),
-#             'med_types_high': PairedSemicolonWidget(magnitude_field_name='magnitude_high'),
-
-#             # We hide the actual magnitude inputs because the widget above controls them
-#             'magnitude_low': forms.HiddenInput(),
-#             'magnitude_high': forms.HiddenInput(),
-#         }
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # --- NEW: Fetch Medication Sub-Categories for the Dropdown ---
-#         # Get unique sub_categories, excluding blanks
-#         med_choices = list(MedicationList.objects
-#                            .exclude(sub_category__isnull=True)
-#                            .exclude(sub_category__exact='')
-#                            .values_list('sub_category', flat=True)
-#                            .distinct()
-#                            .order_by('sub_category'))
-
-#         # --- Pass choices to the widget instance ---
-#         if 'med_types_low' in self.fields:
-#             self.fields['med_types_low'].widget.choices = med_choices
-
-#         if 'med_types_high' in self.fields:
-#             self.fields['med_types_high'].widget.choices = med_choices
+#         choices = [('', 'Select Blood Marker...')] + [(m, m)
+#                                                       for m in markers if m]
+#         self.fields['marker'].choices = choices
 
 
 class MedicationMappingAdminForm(MappingAdminFormBase):
@@ -2092,8 +2504,20 @@ class MedicationMappingAdminForm(MappingAdminFormBase):
             self.fields['med_types_high'].widget.data_choices = sub_categories
 
 
-@admin.register(MedicationList)
-class MedicationListAdmin(admin.ModelAdmin):
+@admin.register(MedicationListProxy)
+class MedicationListAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: Med List -> Med Mapping ---
+    validation_map = [
+        (
+            ['example_medications'],
+            'admin:ui_pharma_medicationmappingproxy_changelist',
+            'Medications Mapping Page',
+            "You added/edited a Medication Name. Please update the Mapping table if this is a new type."
+        )
+    ]
+    related_pages = [
+        ('admin:ui_pharma_medicationmappingproxy_changelist', 'Medications Mapping Page')
+    ]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('category', 'sub_category', 'example_medications',
                      'tcm_narrative_no_effect')
@@ -2106,11 +2530,24 @@ class MedicationListAdmin(admin.ModelAdmin):
     list_display_links = ('category', 'sub_category')
     list_filter = ('category', 'sub_category',)
     list_per_page = 50
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
 
-@admin.register(MedicationMapping)
-class MedicationMappingAdmin(admin.ModelAdmin):
+@admin.register(MedicationMappingProxy)
+class MedicationMappingAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = MedicationMappingAdminForm
+    validation_map = [
+        # Check: Medication Types vs Medication List Sub-Categories
+        (
+            ['med_types_low', 'med_types_high'],
+            MedicationList,              # Target Model
+            'sub_category',              # Target Column
+            'admin:ui_pharma_medicationlistproxy_changelist',
+            'Medication List',
+            "You added a Medication Type that doesn't exist in the Medication List."
+        )
+    ]
 
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('marker', 'panel', 'med_types_low', 'med_types_high')
@@ -2175,6 +2612,9 @@ class MedicationMappingAdmin(admin.ModelAdmin):
             text
         )
 
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
+
     # --- WRAPPER METHODS (PASSING 200px WIDTH) ---
 
     def narrative_low_click(self, obj):
@@ -2198,7 +2638,7 @@ class MedicationMappingAdmin(admin.ModelAdmin):
 # class MedicationScoreDefAdmin(admin.ModelAdmin):
 #     list_display = ('score', 'definition')
 
-@admin.register(MedicationScoreDef)
+@admin.register(MedicationScoreDefProxy)
 class MedicationScoreDefAdmin(admin.ModelAdmin):
     form = ScoreDefAdminForm
     # Display the score text and definition in the list
@@ -2210,7 +2650,7 @@ class MedicationScoreDefAdmin(admin.ModelAdmin):
     ordering = ('score',)
 
 
-@admin.register(SupplementScoreDef)
+@admin.register(SupplementScoreDefProxy)
 class SupplementScoreDefAdmin(admin.ModelAdmin):
     form = ScoreDefAdminForm
     list_display = ('score', 'definition')
@@ -2219,8 +2659,20 @@ class SupplementScoreDefAdmin(admin.ModelAdmin):
     ordering = ('score',)
 
 
-@admin.register(SupplementList)
-class SupplementsListAdmin(admin.ModelAdmin):
+@admin.register(SupplementListProxy)
+class SupplementsListAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: Supp List -> Supp Mapping ---
+    validation_map = [
+        (
+            ['example_supplements'],
+            'admin:ui_pharma_supplementmappingproxy_changelist',
+            'Supplements Mapping Page',
+            "You added/edited a Supplement Name. Please update the Mapping table if this is a new type."
+        )
+    ]
+    related_pages = [
+        ('admin:ui_pharma_supplementmappingproxy_changelist', 'Supplements Mapping Page')
+    ]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('category', 'sub_category',
                      'example_supplements', 'normal_narrative', 'tcm_narrative')
@@ -2233,6 +2685,8 @@ class SupplementsListAdmin(admin.ModelAdmin):
     list_display_links = ('category', 'sub_category')
     list_filter = ('category', 'sub_category',)
     list_per_page = 50
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
 
 class SupplementMappingAdminForm(MappingAdminFormBase):
@@ -2308,64 +2762,21 @@ class SupplementMappingAdminForm(MappingAdminFormBase):
         if 'supp_types_high' in self.fields:
             self.fields['supp_types_high'].widget.magnitude_choices = sorted_scores
 
-# class SupplementMappingAdminForm(MappingAdminFormBase):
-#     class Meta:
-#         model = SupplementMapping
-#         fields = '__all__'
-#         widgets = {
-#             # Pass label_text="Supplement Type" here
-#             'supp_types_low': PairedSemicolonWidget(
-#                 magnitude_field_name='magnitude_low',
-#                 label_text="Supplement Type"
-#             ),
 
-#             # Pass label_text="Supplement Type" here
-#             'supp_types_high': PairedSemicolonWidget(
-#                 magnitude_field_name='magnitude_high',
-#                 label_text="Supplement Type"
-#             ),
-
-#             'magnitude_low': forms.HiddenInput(),
-#             'magnitude_high': forms.HiddenInput(),
-#         }
-
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-
-#         # 1. Fetch raw strings from DB (e.g., "1 = Minor / Minor", "2 = Moderate")
-#         raw_scores = list(
-#             SupplementScoreDef.objects.values_list('score', flat=True))
-
-#         # 2. Parse and Extract "Only the First Number"
-#         cleaned_scores = set()
-#         for s in raw_scores:
-#             if s:
-#                 # Logic: Split by '=' and take the first part, then strip spaces
-#                 # Example: "1 = Minor" -> "1 " -> "1"
-#                 # Example: "4" -> "4"
-#                 clean_val = str(s).split('=')[0].strip()
-
-#                 # Verify it is a digit before adding (safety check)
-#                 if clean_val.isdigit():
-#                     cleaned_scores.add(int(clean_val))
-
-#         # 3. Sort numerically (1, 2, 3, 4, 10...)
-#         sorted_scores = [str(i) for i in sorted(list(cleaned_scores))]
-
-#         # Fallback if DB is empty
-#         if not sorted_scores:
-#             sorted_scores = ['1', '2', '3']
-
-#         # 4. Pass the cleaned numbers to the widget
-#         if 'supp_types_low' in self.fields:
-#             self.fields['supp_types_low'].widget.magnitude_choices = sorted_scores
-#         if 'supp_types_high' in self.fields:
-#             self.fields['supp_types_high'].widget.magnitude_choices = sorted_scores
-
-
-@admin.register(SupplementMapping)
-class SupplementsMappingAdmin(admin.ModelAdmin):
+@admin.register(SupplementMappingProxy)
+class SupplementsMappingAdmin(RemindUpdateMixin, admin.ModelAdmin):
     form = SupplementMappingAdminForm
+    validation_map = [
+        # Check: Supplement Types vs Supplement List Sub-Categories
+        (
+            ['supp_types_low', 'supp_types_high'],
+            SupplementList,              # Target Model
+            'sub_category',              # Target Column
+            'admin:ui_pharma_supplementlistproxy_changelist',
+            'Supplement List',
+            "You added a Supplement Type that doesn't exist in the Supplement List."
+        )
+    ]
 
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('panel', 'marker', 'supp_types_low', 'magnitude_low', 'supp_types_high',
@@ -2394,8 +2805,10 @@ class SupplementsMappingAdmin(admin.ModelAdmin):
     list_display_links = ('marker', 'panel')
     list_filter = ('panel', 'marker')
     list_per_page = 50
-
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
     # --- HELPER FOR TOGGLING TEXT WITH WIDTH CONTROL ---
+
     def _create_click_to_open(self, text, width="200px"):
         """
         Creates a toggleable text field with a specific minimum width.
@@ -2460,15 +2873,10 @@ class SupplementsMappingAdmin(admin.ModelAdmin):
     interp_note_high_click.short_description = "Interpretation Note ↑"
 
 
-# @admin.register(SupplementScoreDef)
-# class SupplementScoreDefAdmin(admin.ModelAdmin):
-#     list_display = ('score', 'definition')
-
-
 # ==============================================================================
 # 7. LIFESTYLE & TCM DEFINITIONS (Search Enabled)
 # ==============================================================================
-@admin.register(LifestyleQuestionnaire)
+@admin.register(LifestyleQuestionnaireProxy)
 class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('question', 'func_perspective', 'tcm_perspective')
@@ -2484,10 +2892,17 @@ class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
     )
     list_display_links = ('question_number', 'question')
     list_filter = ('question_number',)
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
 
 
-@admin.register(TCMBodyTypeMapping)
-class TCMBodyTypeMappingAdmin(admin.ModelAdmin):
+# @admin.register(TCMBodyTypeMapping)
+@admin.register(TCMBodyTypeProxy)
+class TCMBodyTypeMappingAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: Body Type -> TCM Patterns ---
+    related_pages = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')
+    ]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('tcm_body_type', 'tcm_explanation',
                      'func_equivalent', 'func_explanation')
@@ -2502,15 +2917,24 @@ class TCMBodyTypeMappingAdmin(admin.ModelAdmin):
         'tcm_body_type', 'tcm_explanation',
         'func_equivalent', 'func_explanation'
     )
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)
     list_display_links = ('tcm_body_type',)
     list_per_page = 50
 
 
-@admin.register(TCMPathogenDefinition)
-class TCMPathogenDefinitionAdmin(admin.ModelAdmin):
+@admin.register(TCMPathogenProxy)
+# @admin.register(TCMPathogenDefinition)
+class TCMPathogenDefinitionAdmin(RemindUpdateMixin, admin.ModelAdmin):
+    # --- REQUIREMENT C MAPPING: Pathogens -> TCM Patterns ---
+    related_pages = [
+        ('admin:ui_core_patternproxy_changelist', 'TCM Patterns Page')
+    ]
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('pathogen', 'definition')
     list_filter = ('pathogen',)
 
     # --- EXISTING STRUCTURE PRESERVED ---
     list_display = ('pathogen', 'definition')
+    @property
+    def media(self): return forms.Media(**SHARED_MEDIA)

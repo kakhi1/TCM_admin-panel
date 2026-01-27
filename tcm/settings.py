@@ -26,10 +26,10 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
 
 # 2. Update DEBUG
 # Use a string comparison so it defaults to False in production
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+# DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG = True
+DEBUG = True
 
 # ALLOWED_HOSTS = ['*']  # Allow all hosts for local development
 
@@ -45,6 +45,12 @@ INSTALLED_APPS = [
 
     # YOUR CUSTOM APP
     'tcm_admin',
+    # Add the Virtual UI Apps here:
+    'ui_apps.core.apps.CoreConfig',
+    'ui_apps.medical.apps.MedicalConfig',
+    'ui_apps.pharma.apps.PharmaConfig',
+    'ui_apps.wbc.apps.WbcConfig',
+    'ui_apps.lifestyle.apps.LifestyleConfig',
 ]
 
 MIDDLEWARE = [
@@ -57,7 +63,31 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+JAZZMIN_UI_TWEAKS = {
 
+    "theme": "simplex",
+    "dark_mode_theme": "darkly",
+}
+JAZZMIN_SETTINGS = {
+    # ... existing settings ...
+
+    # Updated Ordering: We now order by the "Virtual Apps"
+    "order_with_respect_to": [
+        "ui_core",       # Core Blood Markers & Pattern Mapping
+        "ui_medical",    # Medical Conditions & Symptoms
+        "ui_pharma",     # Medications & Supplements
+        "ui_wbc",        # White Blood Cells Mapping
+        "ui_lifestyle",  # Lifestyle & Dietary Questionnaire
+    ],
+
+    # Optional: Map Icons to the Proxy Models
+    "icons": {
+        "ui_core.BloodMarkersProxy": "fas fa-vial",
+        "ui_core.PatternProxy": "fas fa-project-diagram",
+        "ui_wbc.WBCMatrixProxy": "fas fa-th",
+        # ... add others as preferred
+    },
+}
 ROOT_URLCONF = 'tcm.urls'
 
 # 5. Templates (Crucial for Admin UI)
@@ -79,6 +109,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'tcm.wsgi.application'
+
 
 # # 6. Database Connection (Your code)
 # DATABASES = {
@@ -145,10 +176,10 @@ USE_TZ = True
 JAZZMIN_SETTINGS = {
     # ... your existing Jazzmin settings ...
 
-    # Add custom CSS
+    # # Add custom CSS
     "custom_css": "admin/css/jazzmin_table_scroll.css",
 
-    # Add custom JS
+    # # Add custom JS
     "custom_js": "admin/js/jazzmin_table_scroll.js",
 
     # OR if you already have custom_css/custom_js, combine them:
