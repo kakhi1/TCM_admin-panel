@@ -25,6 +25,7 @@ from .models import (
     SupplementMapping, SupplementScoreDef, LifestyleQuestionnaire,
     TCMBodyTypeMapping, TCMPathogenDefinition
 )
+from .models import AIAgentConfigProxy, AIAgentLogProxy
 
 # --- GLOBAL CONFIGURATION & ASSETS ---
 # # Common media config to ensure Select2 loads for all search-enabled forms
@@ -2947,3 +2948,141 @@ class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
     list_filter = ('question_number',)
     @property
     def media(self): return forms.Media(**SHARED_MEDIA)
+
+# AI AAGENT PROMPT AND RESULT
+
+
+@admin.register(AIAgentLogProxy)
+class AIAgentLogAdmin(admin.ModelAdmin):
+    # Completely Read-Only Admin
+    list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result',
+                    'input_tokens', 'output_tokens', 'generation_time_ms')
+    list_filter = ('status', 'panel_name', 'created_at')
+    search_fields = ('user_identifier', 'error_message', 'panel_name')
+
+    # Prevent adding, changing, or deleting
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    # FIX: Use AIAgentLogProxy instead of AIAgentLog to avoid import errors
+    readonly_fields = [field.name for field in AIAgentLogProxy._meta.fields]
+
+    @property
+    def media(self):
+        return forms.Media(**SHARED_MEDIA)
+
+
+# @admin.register(AIAgentConfigProxy)
+# class AIAgentConfigAdmin(admin.ModelAdmin):
+#     list_display = ('panel_name', 'model_id', 'temperature',
+#                     'is_active', 'updated_at')
+#     list_filter = ('is_active', 'model_id')
+#     search_fields = ('panel_name', 'system_prompt')
+
+#     # Make updated_at read-only
+#     readonly_fields = ('updated_at',)
+
+#     fieldsets = (
+#         ('Configuration', {
+#             'fields': ('panel_name', 'is_active', 'model_id', 'temperature')
+#         }),
+#         ('Prompts', {
+#             'fields': ('system_prompt', 'user_prompt_template'),
+#             'description': 'Ensure {json_data} is present in the User Prompt Template.'
+#         }),
+#         ('Metadata', {
+#             'fields': ('updated_at',)
+#         }),
+#     )
+
+#     @property
+#     def media(self):
+#         return forms.Media(**SHARED_MEDIA)
+
+
+# --- 1. Custom Form to Handle Comma/Dot Logic ---
+class AIAgentConfigForm(forms.ModelForm):
+    # We use a CharField (Text) for input so the user CAN type a comma without an error immediately.
+    # We will convert it to a Float in the clean_temperature method.
+    temperature = forms.CharField(
+        label="Temperature",
+        help_text="Range: 0.0 to 2.0. (Examples: 0.5, 1, 1,2)",
+        widget=forms.TextInput(attrs={'placeholder': '0.5'})
+    )
+
+    class Meta:
+        model = AIAgentConfigProxy
+        fields = '__all__'
+
+    def clean_temperature(self):
+        raw_value = self.cleaned_data['temperature']
+
+        # 1. Convert input to string just in case
+        value_str = str(raw_value)
+
+        # 2. Replace comma with dot
+        if ',' in value_str:
+            value_str = value_str.replace(',', '.')
+
+        # 3. Try to convert to float
+        try:
+            final_float = float(value_str)
+        except ValueError:
+            raise forms.ValidationError(
+                "Invalid temperature. Please enter a number like 0.5 or 1.0")
+
+        # 4. (Optional) Force 1 -> 1.0 logic is automatic with float(),
+        # but the database stores it as float anyway.
+        return final_float
+
+
+# --- 2. Admin Configuration ---
+@admin.register(AIAgentConfigProxy)
+class AIAgentConfigAdmin(admin.ModelAdmin):
+    # Connect the custom form we made above
+    form = AIAgentConfigForm
+
+    list_display = (
+        'panel_name',
+        'model_id',
+        'temperature',
+        'is_active',
+        'system_prompt',
+        'user_prompt_template',
+        'updated_at'
+    )
+    list_filter = ('is_active', 'model_id')
+    search_fields = ('panel_name', 'system_prompt')
+
+    # This logic locks the fields when you are Editing (obj exists),
+    # but keeps them unlocked when you are Creating (obj is None).
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:  # If we are editing an existing row
+            return ('panel_name', 'updated_at')
+        # If we are creating a new row, only updated_at is locked (auto-date)
+        return ('updated_at',)
+
+    fieldsets = (
+        ('Configuration', {
+            'fields': ('panel_name', 'is_active', 'model_id', 'temperature'),
+        }),
+        ('Prompts', {
+            'fields': ('system_prompt', 'user_prompt_template'),
+            'description': 'Ensure {json_data} is present in the User Prompt Template.'
+        }),
+        ('Metadata', {
+            'fields': ('updated_at',)
+        }),
+    )
+
+    @property
+    def media(self):
+        # Keeps your existing styling if you have any
+        return forms.Media()

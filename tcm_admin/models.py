@@ -1013,3 +1013,154 @@ class LifestyleQuestionnaireProxy(LifestyleQuestionnaire):
         app_label = 'ui_lifestyle'  # <--- CRITICAL FIX: Must match your actual installed app
         verbose_name = "Lifestyle & Dietary Questionnaire"
         verbose_name_plural = "Lifestyle & Dietary Questionnaire"
+
+
+# AI AAGENT PROMPT AND RESULT
+class AIAgentConfig(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
+    panel_name = models.CharField(
+        max_length=255,
+        unique=True,
+        db_column='panel_name',
+        verbose_name="Panel Name"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_column='is_active',
+        verbose_name="Is Active"
+    )
+
+    system_prompt = models.TextField(
+        db_column='system_prompt',
+        verbose_name="System Prompt (Persona)"
+    )
+
+    user_prompt_template = models.TextField(
+        db_column='user_prompt_template',
+        verbose_name="User Prompt Template",
+        help_text="Must contain {json_data} placeholder"
+    )
+
+    # Model Choices
+# Model Choices
+    MODEL_CHOICES = [
+        ('deepseek/deepseek-chat', 'DeepSeek Chat (V3.2)'),
+        ('deepseek/deepseek-reasoner', 'DeepSeek Reasoner (V3.2-Thinking)'),
+        ('deepseek/deepseek-v3.2-speciale', 'DeepSeek V3.2 Speciale'),
+    ]
+    model_id = models.CharField(
+        max_length=100,
+        choices=MODEL_CHOICES,
+        default='deepseek/deepseek-chat',
+        db_column='model_id',
+        verbose_name="AI Model ID"
+    )
+
+    temperature = models.FloatField(
+        default=0.3,
+        db_column='temperature',
+        verbose_name="Temperature",
+        validators=[MinValueValidator(0.0), MaxValueValidator(2.0)],
+        help_text="Range: 0.0 to 2.0 (Creative vs Focused)"
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        db_column='updated_at',
+        verbose_name="Last Updated"
+    )
+
+    class Meta:
+        managed = True  # Allows Django to manage this table
+        db_table = 'ai_agent_configs'
+        verbose_name = "AI Agent Config"
+        verbose_name_plural = "AI Agent Configs"
+
+    def __str__(self):
+        return self.panel_name
+
+
+class AIAgentLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    panel_name = models.CharField(
+        max_length=255,
+        db_column='panel_name',
+        verbose_name="Panel Name",
+        blank=True, null=True
+    )
+    user_identifier = models.CharField(
+        max_length=255,
+        db_column='user_identifier',
+        verbose_name="User Identifier",
+        blank=True, null=True
+    )
+    input_tokens = models.IntegerField(
+        db_column='input_tokens',
+        verbose_name="Input Tokens",
+        blank=True, null=True
+    )
+    output_tokens = models.IntegerField(
+        db_column='output_tokens',
+        verbose_name="Output Tokens",
+        blank=True, null=True
+    )
+    generation_time_ms = models.IntegerField(
+        db_column='generation_time_ms',
+        verbose_name="Duration (ms)",
+        blank=True, null=True
+    )
+
+    status = models.CharField(
+        max_length=50,
+        db_column='status',
+        verbose_name="Status",
+        blank=True, null=True
+    )
+    error_message = models.TextField(
+        db_column='error_message',
+        verbose_name="Error Message",
+        blank=True, null=True
+    )
+    result = models.TextField(
+        db_column='result',
+        verbose_name="Result",
+        blank=True, null=True
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column='created_at',
+        verbose_name="Created At"
+    )
+
+    class Meta:
+        managed = True
+        db_table = 'ai_agent_logs'
+        verbose_name = "AI Agent Log"
+        verbose_name_plural = "AI Agent Logs"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.panel_name} - {self.created_at}"
+
+
+# --- PROXY MODELS (For Admin Organization) ---
+# Add these at the bottom with your other proxies
+
+class AIAgentConfigProxy(AIAgentConfig):
+    class Meta:
+        proxy = True
+        # Must match the 'label' from apps.py
+        app_label = 'zz_ai_agent'
+        verbose_name = "AI Config"
+        verbose_name_plural = "AI Configs"
+
+
+class AIAgentLogProxy(AIAgentLog):
+    class Meta:
+        proxy = True
+        # Must match the 'label' from apps.py
+        app_label = 'zz_ai_agent'
+        verbose_name = "AI Log"
+        verbose_name_plural = "AI Logs"

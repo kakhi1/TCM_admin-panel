@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'ui_apps.pharma.apps.PharmaConfig',
     'ui_apps.wbc.apps.WbcConfig',
     'ui_apps.lifestyle.apps.LifestyleConfig',
+    'ui_apps.ai_agent',
 ]
 
 MIDDLEWARE = [
