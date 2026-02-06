@@ -2955,7 +2955,7 @@ class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
 @admin.register(AIAgentLogProxy)
 class AIAgentLogAdmin(admin.ModelAdmin):
     # Completely Read-Only Admin
-    list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result',
+    list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result', "error_message",
                     'input_tokens', 'output_tokens', 'generation_time_ms')
     list_filter = ('status', 'panel_name', 'created_at')
     search_fields = ('user_identifier', 'error_message', 'panel_name')
@@ -3010,11 +3010,11 @@ class AIAgentLogAdmin(admin.ModelAdmin):
 class AIAgentConfigForm(forms.ModelForm):
     # We use a CharField (Text) for input so the user CAN type a comma without an error immediately.
     # We will convert it to a Float in the clean_temperature method.
-    temperature = forms.CharField(
-        label="Temperature",
-        help_text="Range: 0.0 to 2.0. (Examples: 0.5, 1, 1,2)",
-        widget=forms.TextInput(attrs={'placeholder': '0.5'})
-    )
+    # temperature = forms.CharField(
+    #     label="Temperature",
+    #     help_text="Range: 0.0 to 2.0. (Examples: 0.5, 1, 1,2)",
+    #     widget=forms.TextInput(attrs={'placeholder': '0.5'})
+    # )
 
     class Meta:
         model = AIAgentConfigProxy
@@ -3051,7 +3051,6 @@ class AIAgentConfigAdmin(admin.ModelAdmin):
     list_display = (
         'panel_name',
         'model_id',
-        'temperature',
         'is_active',
         'system_prompt',
         'user_prompt_template',
@@ -3071,7 +3070,7 @@ class AIAgentConfigAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Configuration', {
-            'fields': ('panel_name', 'is_active', 'model_id', 'temperature'),
+            'fields': ('panel_name', 'is_active', 'model_id'),
         }),
         ('Prompts', {
             'fields': ('system_prompt', 'user_prompt_template'),
