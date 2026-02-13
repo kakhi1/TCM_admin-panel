@@ -51,11 +51,11 @@ SHARED_MEDIA = {
         )
     },
     'js': (
-        # 1. LOAD JQUERY FIRST (Critical)
-        # 'https://code.jquery.com/jquery-3.6.0.min.js',
+        # 1. FORCE LOAD JQUERY FIRST (Critical Fix)
+        'https://code.jquery.com/jquery-3.6.0.min.js',
 
-        # 2. LOAD SELECT2 (Depends on jQuery)
-        # 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js',
+        # 2. LOAD SELECT2 (Now it will definitely find jQuery)
+        'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js',
 
         # 3. YOUR SETUP SCRIPT (Must run last)
         'admin/js/admin_select2_setup.js',

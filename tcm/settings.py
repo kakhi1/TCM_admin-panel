@@ -70,8 +70,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 JAZZMIN_UI_TWEAKS = {
-
-    "theme": "flatly",
+    "theme": "flatly",   # This sets the font size
     "dark_mode_theme": "darkly",
 }
 JAZZMIN_SETTINGS = {
