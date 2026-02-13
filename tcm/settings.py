@@ -200,9 +200,9 @@ STATIC_URL = '/static/'
 # ADD THIS LINE:
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 # Enable WhiteNoise compression and caching
-# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Safer for now. Doesn't crash if a file is missing.
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # --- ADD THIS BLOCK ---
