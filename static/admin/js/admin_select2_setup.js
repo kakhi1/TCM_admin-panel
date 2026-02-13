@@ -39,62 +39,59 @@
 // })(jQuery || django.jQuery);
 /* file: static/admin/js/admin_select2_setup.js */
 
-// We use 'window.addEventListener' to ensure Jazzmin's jQuery is fully loaded
 window.addEventListener("load", function () {
-  // 1. SAFE JQUERY RESOLUTION
-  // Jazzmin usually puts jQuery in 'django.jQuery' or 'window.jQuery'
+  // 1. Get Jazzmin's jQuery
   var $ = window.django ? window.django.jQuery : window.jQuery;
-
   if (!$) {
-    console.error("jQuery not found. Select2 and Tabs cannot initialize.");
+    console.error("jQuery not found");
     return;
   }
 
-  // --- PART A: FIX THE TABS (The URL Hash Logic) ---
-  if (window.location.hash) {
-    var hash = window.location.hash; // e.g. "#medicine-tcm-diagnoses-tab"
+  // 2. Load Select2 Dynamically (Fixes the "missing $" crash)
+  var script = document.createElement("script");
+  script.src =
+    "https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js";
+  script.onload = function () {
+    // This runs only after Select2 is fully loaded
+    initMyAdmin($);
+  };
+  document.head.appendChild(script);
 
-    // Jazzmin/Bootstrap tabs are links <a>. We try to find the one matching the hash.
-    var $tabLink = $('a[href="' + hash + '"]');
-
-    // If found, click it to switch the tab
-    if ($tabLink.length > 0) {
-      $tabLink.tab("show"); // Bootstrap standard
-      // Or fallback if .tab() isn't available:
-      // $tabLink.click();
+  function initMyAdmin($) {
+    // --- PART A: FIX THE TABS ---
+    if (window.location.hash) {
+      var hash = window.location.hash;
+      var $tabLink = $('a[href="' + hash + '"]');
+      if ($tabLink.length > 0) {
+        // Use standard click if bootstrap tab() isn't exposed
+        $tabLink[0].click();
+      }
     }
-  }
 
-  // --- PART B: INITIALIZE SELECT2 ---
-  function initSelect2(element) {
-    $(element).select2({
-      width: "100%",
-      allowClear: true,
-      placeholder: $(element).data("placeholder") || "Select or Type...",
-      tags: true, // CRITICAL: Allows typing new values
-      createTag: function (params) {
-        var term = $.trim(params.term);
-        if (term === "") {
-          return null;
-        }
-        return {
-          id: term,
-          text: term,
-          newTag: true,
-        };
-      },
+    // --- PART B: SETUP DROPDOWNS ---
+    function applySelect2(element) {
+      $(element).select2({
+        width: "100%",
+        allowClear: true,
+        placeholder: $(element).data("placeholder") || "Select or Type...",
+        tags: true,
+        createTag: function (params) {
+          var term = $.trim(params.term);
+          if (term === "") return null;
+          return { id: term, text: term, newTag: true };
+        },
+      });
+    }
+
+    $(".advanced-select").each(function () {
+      applySelect2(this);
+    });
+
+    // Handle Inline Rows
+    $(document).on("formset:added", function (event, $row) {
+      $row.find(".advanced-select").each(function () {
+        applySelect2(this);
+      });
     });
   }
-
-  // Initialize on existing fields
-  $(".advanced-select").each(function () {
-    initSelect2(this);
-  });
-
-  // Initialize on new rows (for Inlines)
-  $(document).on("formset:added", function (event, $row, formsetName) {
-    $row.find(".advanced-select").each(function () {
-      initSelect2(this);
-    });
-  });
 });
