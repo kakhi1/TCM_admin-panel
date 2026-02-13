@@ -69,11 +69,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-JAZZMIN_UI_TWEAKS = {
+# JAZZMIN_UI_TWEAKS = {
 
-    "theme": "flatly",
-    "dark_mode_theme": "darkly",
-}
+#     "theme": "flatly",
+#     "dark_mode_theme": "darkly",
+# }
 JAZZMIN_SETTINGS = {
     # ... existing settings ...
 
