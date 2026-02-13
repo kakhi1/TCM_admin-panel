@@ -2977,72 +2977,99 @@ class AIAgentLogAdmin(admin.ModelAdmin):
     def media(self):
         return forms.Media(**SHARED_MEDIA)
 
-
-# @admin.register(AIAgentConfigProxy)
-# class AIAgentConfigAdmin(admin.ModelAdmin):
-#     list_display = ('panel_name', 'model_id', 'temperature',
-#                     'is_active', 'updated_at')
-#     list_filter = ('is_active', 'model_id')
-#     search_fields = ('panel_name', 'system_prompt')
-
-#     # Make updated_at read-only
-#     readonly_fields = ('updated_at',)
-
-#     fieldsets = (
-#         ('Configuration', {
-#             'fields': ('panel_name', 'is_active', 'model_id', 'temperature')
-#         }),
-#         ('Prompts', {
-#             'fields': ('system_prompt', 'user_prompt_template'),
-#             'description': 'Ensure {json_data} is present in the User Prompt Template.'
-#         }),
-#         ('Metadata', {
-#             'fields': ('updated_at',)
-#         }),
-#     )
-
-#     @property
-#     def media(self):
-#         return forms.Media(**SHARED_MEDIA)
+# --- 1. UPDATED WIDGET (Supports "No Insert Buttons" mode) ---
 
 
-# --- 1. Custom Form to Handle Comma/Dot Logic ---
+class PromptInjectionWidget(forms.Textarea):
+    """
+    Adds a toolbar.
+    - show_inserts=True: Shows [+ {json_data}] buttons (For User Prompt)
+    - show_inserts=False: Shows only Restore button (For System Prompt)
+    """
+
+    def __init__(self, backup_field_name, show_inserts=True, attrs=None):
+        self.backup_field_name = backup_field_name
+        self.show_inserts = show_inserts
+        super().__init__(attrs)
+
+    def render(self, name, value, attrs=None, renderer=None):
+        html = super().render(name, value, attrs, renderer)
+
+        textarea_id = attrs.get('id', f'id_{name}')
+        backup_id = f"id_{self.backup_field_name}"
+
+        # 1. Build Insert Buttons HTML (Only if show_inserts is True)
+        insert_html = ""
+        if self.show_inserts:
+            insert_html = f"""
+            <strong style="color: #333;">Insert:</strong>
+            <button type="button" class="button" onclick="insert_{textarea_id}('{{json_data}}')"> + {{json_data}}</button>
+            <button type="button" class="button" onclick="insert_{textarea_id}('{{panel_name}}')"> + {{panel_name}}</button>
+            &nbsp;|&nbsp;
+            """
+
+        # 2. Build Full Toolbar
+        toolbar_html = f"""
+        <div class="prompt-toolbar" style="margin-bottom: 5px; padding: 5px; background: #e9e9e9; border: 1px solid #ccc; border-bottom: none;">
+            {insert_html}
+            <strong style="color: #333;">Actions:</strong>
+            <button type="button" class="button" style="background: #ba2121; color: white;" onclick="restore_{textarea_id}()"> ↺ Restore from Master</button>
+        </div>
+
+        <script>
+        function insert_{textarea_id}(text) {{
+            var txtarea = document.getElementById('{textarea_id}');
+            if (!txtarea) return;
+            var start = txtarea.selectionStart;
+            var end = txtarea.selectionEnd;
+            var val = txtarea.value;
+            txtarea.value = val.substring(0, start) + text + val.substring(end);
+            txtarea.selectionStart = txtarea.selectionEnd = start + text.length;
+            txtarea.focus();
+        }}
+
+        function restore_{textarea_id}() {{
+            var sourceBox = document.getElementById('{backup_id}');
+            var targetBox = document.getElementById('{textarea_id}');
+            if (!sourceBox || !sourceBox.value) {{
+                alert("Master Template is empty or missing.");
+                return;
+            }}
+            if (confirm("Replace text with Master Template content?")) {{
+                targetBox.value = sourceBox.value;
+            }}
+        }}
+        </script>
+        """
+        return mark_safe(toolbar_html + html)
+
+
+# --- 2. UPDATED FORM ---
 class AIAgentConfigForm(forms.ModelForm):
-    # We use a CharField (Text) for input so the user CAN type a comma without an error immediately.
-    # We will convert it to a Float in the clean_temperature method.
-    # temperature = forms.CharField(
-    #     label="Temperature",
-    #     help_text="Range: 0.0 to 2.0. (Examples: 0.5, 1, 1,2)",
-    #     widget=forms.TextInput(attrs={'placeholder': '0.5'})
-    # )
-
     class Meta:
         model = AIAgentConfigProxy
         fields = '__all__'
+        widgets = {
+            # System Prompt: show_inserts=False (No variables)
+            'system_prompt': PromptInjectionWidget(
+                backup_field_name='saved_system_prompt_backup',
+                show_inserts=False,
+                attrs={'rows': 15, 'style': 'width: 100%; font-family: monospace;'}
+            ),
 
-    def clean_temperature(self):
-        raw_value = self.cleaned_data['temperature']
+            # User Prompt: show_inserts=True (Has variables)
+            'user_prompt_template': PromptInjectionWidget(
+                backup_field_name='saved_template_backup',
+                show_inserts=True,
+                attrs={'rows': 15, 'style': 'width: 100%; font-family: monospace;'}
+            ),
 
-        # 1. Convert input to string just in case
-        value_str = str(raw_value)
-
-        # 2. Replace comma with dot
-        if ',' in value_str:
-            value_str = value_str.replace(',', '.')
-
-        # 3. Try to convert to float
-        try:
-            final_float = float(value_str)
-        except ValueError:
-            raise forms.ValidationError(
-                "Invalid temperature. Please enter a number like 0.5 or 1.0")
-
-        # 4. (Optional) Force 1 -> 1.0 logic is automatic with float(),
-        # but the database stores it as float anyway.
-        return final_float
+            # Hidden Backups
+            'saved_system_prompt_backup': forms.HiddenInput(),
+            'saved_template_backup': forms.HiddenInput(),
+        }
 
 
-# --- 2. Admin Configuration ---
 @admin.register(AIAgentConfigProxy)
 class AIAgentConfigAdmin(admin.ModelAdmin):
     # Connect the custom form we made above
@@ -3072,14 +3099,37 @@ class AIAgentConfigAdmin(admin.ModelAdmin):
         ('Configuration', {
             'fields': ('panel_name', 'is_active', 'model_id'),
         }),
-        ('Prompts', {
-            'fields': ('system_prompt', 'user_prompt_template'),
-            'description': 'Ensure {json_data} is present in the User Prompt Template.'
+        ('System Prompt (Persona)', {
+            'description': 'Define the AI role here. Use the buttons to Restore from Master.',
+            'fields': (
+                'system_prompt',               # <--- Has Toolbar
+                'saved_system_prompt_backup'   # <--- The Backup Storage
+            ),
+        }),
+        ('User Prompt (Task)', {
+            'description': 'Define the specific task. Must include {json_data}.',
+            'fields': (
+                'user_prompt_template',        # <--- Has Toolbar
+                'saved_template_backup'        # <--- The Backup Storage
+            ),
         }),
         ('Metadata', {
             'fields': ('updated_at',)
         }),
     )
+
+    # fieldsets = (
+    #     ('Configuration', {
+    #         'fields': ('panel_name', 'is_active', 'model_id'),
+    #     }),
+    #     ('Prompts', {
+    #         'fields': ('system_prompt', 'user_prompt_template'),
+    #         'description': 'Ensure {json_data} is present in the User Prompt Template.'
+    #     }),
+    #     ('Metadata', {
+    #         'fields': ('updated_at',)
+    #     }),
+    # )
 
     @property
     def media(self):

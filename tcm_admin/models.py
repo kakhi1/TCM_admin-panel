@@ -1035,15 +1035,28 @@ class AIAgentConfig(models.Model):
         db_column='system_prompt',
         verbose_name="System Prompt (Persona)"
     )
+    # --- NEW FIELD 1: MASTER BACKUP FOR SYSTEM PROMPT ---
+    saved_system_prompt_backup = models.TextField(
+        db_column='saved_system_prompt_backup',
+        verbose_name="Saved System Prompt (Master)",
+        help_text="Master backup. The 'Restore' button copies this text into the active System Prompt.",
+        blank=True, null=True
+    )
 
     user_prompt_template = models.TextField(
         db_column='user_prompt_template',
         verbose_name="User Prompt Template",
         help_text="Must contain {json_data} placeholder"
     )
+# --- NEW FIELD 2: MASTER BACKUP FOR USER PROMPT ---
+    saved_template_backup = models.TextField(
+        db_column='saved_template_backup',
+        verbose_name="Saved User Template (Master)",
+        help_text="Master backup. The 'Restore' button copies this text into the active User Prompt.",
+        blank=True, null=True
+    )
 
     # Model Choices
-# Model Choices
     MODEL_CHOICES = [
         ('deepseek/deepseek-chat', 'DeepSeek Chat (V3.2)'),
         ('deepseek/deepseek-reasoner', 'DeepSeek Reasoner (V3.2-Thinking)'),
