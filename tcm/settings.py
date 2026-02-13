@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import dj_database_url
 # 1. Load environment variables
 load_dotenv()
-
+print("--- SERVER RESTARTING: LOADING NEW SETTINGS (FLATLY) ---")
 # FORCE CSS/JS MIME TYPES
 mimetypes.add_type("text/css", ".css", True)
 mimetypes.add_type("application/javascript", ".js", True)
