@@ -1,10 +1,11 @@
 # django<6.0
 
 django==4.2.17
+whitenoise==6.11.0
 gunicorn            # The production web server
 psycopg2-binary     # PostgreSQL adapter
 dj-database-url     # To parse the database URL provided by Seenode
-whitenoise          # To serve Admin Panel CSS/Static files
+# whitenoise          # To serve Admin Panel CSS/Static files
 python-dotenv
 django-jazzmin
 django-modeladmin-reorder
