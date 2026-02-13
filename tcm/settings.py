@@ -189,7 +189,8 @@ JAZZMIN_SETTINGS = {
 }
 # 9. Static files (CSS, JavaScript, Images)
 # This is required for the Admin panel to look correct
-STATIC_URL = 'static/'
+# STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 # ADD THIS LINE:
 STATIC_ROOT = BASE_DIR / 'staticfiles'
