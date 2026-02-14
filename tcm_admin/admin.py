@@ -29,20 +29,6 @@ from .models import AIAgentConfigProxy, AIAgentLogProxy
 
 # --- GLOBAL CONFIGURATION & ASSETS ---
 # # Common media config to ensure Select2 loads for all search-enabled forms
-# SHARED_MEDIA = {
-#     'css': {
-#         'all': (
-#             'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css',
-#             'admin/css/admin_enhanced.css',
-#         )
-#     },
-#     'js': (
-#         'https://code.jquery.com/jquery-3.6.0.min.js',
-#         'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js',
-#         'admin/js/admin_select2_setup.js',
-
-#     )
-# }
 SHARED_MEDIA = {
     'css': {
         'all': (
@@ -51,17 +37,10 @@ SHARED_MEDIA = {
         )
     },
     'js': (
-        # 1. FORCE LOAD JQUERY FIRST (Critical Fix)
         'https://code.jquery.com/jquery-3.6.0.min.js',
-
-        # 2. LOAD SELECT2 (Now it will definitely find jQuery)
         'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js',
-
-        # 3. YOUR SETUP SCRIPT (Must run last)
         'admin/js/admin_select2_setup.js',
 
-        # 4. Unsaved Changes Warning
-        'admin/js/unsaved_changes.js',
     )
 }
 
