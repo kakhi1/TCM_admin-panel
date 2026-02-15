@@ -2931,13 +2931,40 @@ class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
 # AI AAGENT PROMPT AND RESULT
 
 
+# @admin.register(AIAgentLogProxy)
+# class AIAgentLogAdmin(admin.ModelAdmin):
+#     # Completely Read-Only Admin
+#     list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result', "error_message",
+#                     'input_tokens', 'output_tokens', 'generation_time_ms')
+#     list_filter = ('status', 'panel_name', 'created_at')
+#     search_fields = ('user_identifier', 'error_message', 'panel_name')
+
+#     # Prevent adding, changing, or deleting
+#     def has_add_permission(self, request):
+#         return False
+
+#     def has_change_permission(self, request, obj=None):
+#         return False
+
+#     def has_delete_permission(self, request, obj=None):
+#         return False
+
+#     # FIX: Use AIAgentLogProxy instead of AIAgentLog to avoid import errors
+#     readonly_fields = [field.name for field in AIAgentLogProxy._meta.fields]
+
+#     @property
+#     def media(self):
+#         return forms.Media(**SHARED_MEDIA)
+
 @admin.register(AIAgentLogProxy)
 class AIAgentLogAdmin(admin.ModelAdmin):
     # Completely Read-Only Admin
-    list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result', "error_message",
+    # REPLACED 'result' with 'result_click' in list_display
+    list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result_click', "error_message",
                     'input_tokens', 'output_tokens', 'generation_time_ms')
-    list_filter = ('status', 'panel_name', 'created_at')
-    search_fields = ('user_identifier', 'error_message', 'panel_name')
+    list_filter = ('status', 'panel_name', 'created_at', 'user_identifier')
+    search_fields = ('user_identifier', 'error_message',
+                     'panel_name', 'result')
 
     # Prevent adding, changing, or deleting
     def has_add_permission(self, request):
@@ -2956,6 +2983,64 @@ class AIAgentLogAdmin(admin.ModelAdmin):
     def media(self):
         return forms.Media(**SHARED_MEDIA)
 
+    # --- CUSTOM RESULT DISPLAY LOGIC ---
+    def result_click(self, obj):
+        """
+        Parses the structured text to show only the 'Summary' section initially,
+        with a click-to-expand feature for the full report.
+        """
+        if not obj.result:
+            return "-"
+
+        text = str(obj.result)
+
+        # 1. Extract just the Summary for the "Closed" view
+        # We look for "Summary:" and stop before "What we found:" or the next double newline
+        preview_text = text[:150] + "..."  # Fallback
+
+        try:
+            if "Summary:" in text:
+                start_index = text.find("Summary:") + len("Summary:")
+                # Try to find the end of the summary section (usually next header or double newline)
+                end_index = text.find("What we found:", start_index)
+
+                if end_index == -1:
+                    end_index = text.find("\n\n", start_index)
+
+                if end_index != -1:
+                    extracted_summary = text[start_index:end_index].strip()
+                    if extracted_summary:
+                        preview_text = f"<strong>Summary:</strong> {extracted_summary}"
+        except Exception:
+            pass  # Keep fallback if parsing fails
+
+        # 2. Format Full Text to preserve line breaks and structure
+        full_text_formatted = format_html(
+            '<div style="white-space: pre-wrap; margin-top: 10px; color: #333;">{}</div>', text)
+
+        # 3. Render the Toggle (Closed View / Open View)
+        return format_html(
+            '<div class="text-toggle-container" style="min-width: 350px; max-width: 600px;">'
+
+            # -- CLOSED STATE (Show Summary Only) --
+            '<div style="cursor:pointer; display:block; padding: 5px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px;" '
+            'onclick="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">'
+            '<span>{}</span> '
+            '<div style="margin-top:5px; color:#447e9b; font-weight:bold; font-size: 11px;"> &#9662; Click to Read Full Report</div>'
+            '</div>'
+
+            # -- OPEN STATE (Show Full Result) --
+            '<div style="cursor:pointer; display:none; padding: 5px; background: #fff; border: 1px solid #ddd; border-radius: 4px;" '
+            'onclick="this.style.display=\'none\'; this.previousElementSibling.style.display=\'block\';">'
+            '<div style="color:#447e9b; font-weight:bold; font-size: 11px; margin-bottom: 5px;"> &#9652; Click to Collapse</div>'
+            '{} '
+            '</div>'
+            '</div>',
+            mark_safe(preview_text),
+            full_text_formatted
+        )
+
+    result_click.short_description = "AI Analysis Result"
 # --- 1. UPDATED WIDGET (Supports "No Insert Buttons" mode) ---
 
 
