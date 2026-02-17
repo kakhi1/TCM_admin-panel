@@ -1,4 +1,7 @@
 
+from django.shortcuts import render
+from django.db.models import Count
+from .models import AIAgentConfigProxy
 from django.contrib import messages
 from django.http import HttpResponse
 from django.utils.html import escape
@@ -2928,45 +2931,20 @@ class LifestyleQuestionnaireAdmin(admin.ModelAdmin):
     @property
     def media(self): return forms.Media(**SHARED_MEDIA)
 
+
 # AI AAGENT PROMPT AND RESULT
 
 
-# @admin.register(AIAgentLogProxy)
-# class AIAgentLogAdmin(admin.ModelAdmin):
-#     # Completely Read-Only Admin
-#     list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result', "error_message",
-#                     'input_tokens', 'output_tokens', 'generation_time_ms')
-#     list_filter = ('status', 'panel_name', 'created_at')
-#     search_fields = ('user_identifier', 'error_message', 'panel_name')
-
-#     # Prevent adding, changing, or deleting
-#     def has_add_permission(self, request):
-#         return False
-
-#     def has_change_permission(self, request, obj=None):
-#         return False
-
-#     def has_delete_permission(self, request, obj=None):
-#         return False
-
-#     # FIX: Use AIAgentLogProxy instead of AIAgentLog to avoid import errors
-#     readonly_fields = [field.name for field in AIAgentLogProxy._meta.fields]
-
-#     @property
-#     def media(self):
-#         return forms.Media(**SHARED_MEDIA)
-
 @admin.register(AIAgentLogProxy)
 class AIAgentLogAdmin(admin.ModelAdmin):
-    # Completely Read-Only Admin
-    # REPLACED 'result' with 'result_click' in list_display
+    # 1. List View Configuration
     list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result_click', "error_message",
                     'input_tokens', 'output_tokens', 'generation_time_ms')
     list_filter = ('status', 'panel_name', 'created_at', 'user_identifier')
     search_fields = ('user_identifier', 'error_message',
                      'panel_name', 'result')
 
-    # Prevent adding, changing, or deleting
+    # 2. Permissions (Read-Only)
     def has_add_permission(self, request):
         return False
 
@@ -2976,14 +2954,15 @@ class AIAgentLogAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-    # FIX: Use AIAgentLogProxy instead of AIAgentLog to avoid import errors
+    # Make all fields read-only
     readonly_fields = [field.name for field in AIAgentLogProxy._meta.fields]
 
+    # 3. Media (CSS/JS)
     @property
     def media(self):
         return forms.Media(**SHARED_MEDIA)
 
-    # --- CUSTOM RESULT DISPLAY LOGIC ---
+    # 4. Custom Result Column (Accordion View)
     def result_click(self, obj):
         """
         Parses the structured text to show only the 'Summary' section initially,
@@ -2994,8 +2973,7 @@ class AIAgentLogAdmin(admin.ModelAdmin):
 
         text = str(obj.result)
 
-        # 1. Extract just the Summary for the "Closed" view
-        # We look for "Summary:" and stop before "What we found:" or the next double newline
+        # A. Extract just the Summary for the "Closed" view
         preview_text = text[:150] + "..."  # Fallback
 
         try:
@@ -3014,11 +2992,11 @@ class AIAgentLogAdmin(admin.ModelAdmin):
         except Exception:
             pass  # Keep fallback if parsing fails
 
-        # 2. Format Full Text to preserve line breaks and structure
+        # B. Format Full Text to preserve line breaks and structure
         full_text_formatted = format_html(
             '<div style="white-space: pre-wrap; margin-top: 10px; color: #333;">{}</div>', text)
 
-        # 3. Render the Toggle (Closed View / Open View)
+        # C. Render the Toggle (Closed View / Open View)
         return format_html(
             '<div class="text-toggle-container" style="min-width: 350px; max-width: 600px;">'
 
@@ -3041,43 +3019,274 @@ class AIAgentLogAdmin(admin.ModelAdmin):
         )
 
     result_click.short_description = "AI Analysis Result"
+
+    # 5. Custom "Folder View" Logic (Groups by User)
+    def changelist_view(self, request, extra_context=None):
+        # A. If we are searching, filtering, or have clicked a specific user, show the standard list
+        if request.GET:
+            return super().changelist_view(request, extra_context=extra_context)
+
+        # B. Otherwise, show the "User Folders" summary view
+        #    Group logs by user_identifier and count them
+        summary_data = (
+            self.model.objects
+            .values('user_identifier')
+            .annotate(log_count=Count('id'))
+            .order_by('-log_count')
+        )
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'AI Logs - Select User',
+            'summary_data': summary_data,
+            # Pass opts so breadcrumbs work correctly
+            'opts': self.model._meta,
+        }
+
+        # Ensure you created this template in templates/admin/ai_agent_user_summary.html
+        return render(request, "admin/ai_agent_user_summary.html", context)
+
+# @admin.register(AIAgentLogProxy)
+# class AIAgentLogAdmin(admin.ModelAdmin):
+#     # Completely Read-Only Admin
+#     # REPLACED 'result' with 'result_click' in list_display
+#     list_display = ('created_at', 'status', 'panel_name', 'user_identifier', 'result_click', "error_message",
+#                     'input_tokens', 'output_tokens', 'generation_time_ms')
+#     list_filter = ('status', 'panel_name', 'created_at', 'user_identifier')
+#     search_fields = ('user_identifier', 'error_message',
+#                      'panel_name', 'result')
+
+#     # Prevent adding, changing, or deleting
+#     def has_add_permission(self, request):
+#         return False
+
+#     def has_change_permission(self, request, obj=None):
+#         return False
+
+#     def has_delete_permission(self, request, obj=None):
+#         return False
+
+#     # FIX: Use AIAgentLogProxy instead of AIAgentLog to avoid import errors
+#     readonly_fields = [field.name for field in AIAgentLogProxy._meta.fields]
+
+#     @property
+#     def media(self):
+#         return forms.Media(**SHARED_MEDIA)
+
+#     # --- CUSTOM RESULT DISPLAY LOGIC ---
+#     def result_click(self, obj):
+#         """
+#         Parses the structured text to show only the 'Summary' section initially,
+#         with a click-to-expand feature for the full report.
+#         """
+#         if not obj.result:
+#             return "-"
+
+#         text = str(obj.result)
+
+#         # 1. Extract just the Summary for the "Closed" view
+#         # We look for "Summary:" and stop before "What we found:" or the next double newline
+#         preview_text = text[:150] + "..."  # Fallback
+
+#         try:
+#             if "Summary:" in text:
+#                 start_index = text.find("Summary:") + len("Summary:")
+#                 # Try to find the end of the summary section (usually next header or double newline)
+#                 end_index = text.find("What we found:", start_index)
+
+#                 if end_index == -1:
+#                     end_index = text.find("\n\n", start_index)
+
+#                 if end_index != -1:
+#                     extracted_summary = text[start_index:end_index].strip()
+#                     if extracted_summary:
+#                         preview_text = f"<strong>Summary:</strong> {extracted_summary}"
+#         except Exception:
+#             pass  # Keep fallback if parsing fails
+
+#         # 2. Format Full Text to preserve line breaks and structure
+#         full_text_formatted = format_html(
+#             '<div style="white-space: pre-wrap; margin-top: 10px; color: #333;">{}</div>', text)
+
+#         # 3. Render the Toggle (Closed View / Open View)
+#         return format_html(
+#             '<div class="text-toggle-container" style="min-width: 350px; max-width: 600px;">'
+
+#             # -- CLOSED STATE (Show Summary Only) --
+#             '<div style="cursor:pointer; display:block; padding: 5px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px;" '
+#             'onclick="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">'
+#             '<span>{}</span> '
+#             '<div style="margin-top:5px; color:#447e9b; font-weight:bold; font-size: 11px;"> &#9662; Click to Read Full Report</div>'
+#             '</div>'
+
+#             # -- OPEN STATE (Show Full Result) --
+#             '<div style="cursor:pointer; display:none; padding: 5px; background: #fff; border: 1px solid #ddd; border-radius: 4px;" '
+#             'onclick="this.style.display=\'none\'; this.previousElementSibling.style.display=\'block\';">'
+#             '<div style="color:#447e9b; font-weight:bold; font-size: 11px; margin-bottom: 5px;"> &#9652; Click to Collapse</div>'
+#             '{} '
+#             '</div>'
+#             '</div>',
+#             mark_safe(preview_text),
+#             full_text_formatted
+#         )
+
+#     result_click.short_description = "AI Analysis Result"
+
 # --- 1. UPDATED WIDGET (Supports "No Insert Buttons" mode) ---
+
+# ==============================================================================
+# 1. CUSTOM WIDGET: Adds "Update Master", "Restore", and "Insert" Buttons
+# ==============================================================================
 
 
 class PromptInjectionWidget(forms.Textarea):
     """
-    Adds a toolbar.
-    - show_inserts=True: Shows [+ {json_data}] buttons (For User Prompt)
-    - show_inserts=False: Shows only Restore button (For System Prompt)
+    A custom Textarea with a modern toolbar.
     """
 
     def __init__(self, backup_field_name, show_inserts=True, attrs=None):
         self.backup_field_name = backup_field_name
         self.show_inserts = show_inserts
-        super().__init__(attrs)
+        # Set default styles for the text area itself to match the toolbar width
+        default_attrs = {
+            'style': 'width: 100%; border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0;'}
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(default_attrs)
 
     def render(self, name, value, attrs=None, renderer=None):
-        html = super().render(name, value, attrs, renderer)
+        # Render the standard Django textarea
+        textarea_html = super().render(name, value, attrs, renderer)
 
         textarea_id = attrs.get('id', f'id_{name}')
         backup_id = f"id_{self.backup_field_name}"
 
-        # 1. Build Insert Buttons HTML (Only if show_inserts is True)
+        # 1. Build Insert Buttons (Chips)
         insert_html = ""
         if self.show_inserts:
             insert_html = f"""
-            <strong style="color: #333;">Insert:</strong>
-            <button type="button" class="button" onclick="insert_{textarea_id}('{{json_data}}')"> + {{json_data}}</button>
-            <button type="button" class="button" onclick="insert_{textarea_id}('{{panel_name}}')"> + {{panel_name}}</button>
-            &nbsp;|&nbsp;
+            <div class="toolbar-section">
+                <span class="toolbar-label">VARIABLES:</span>
+                <button type="button" class="btn-pill" title="Insert JSON Data variable" onclick="insert_{textarea_id}('{{json_data}}')">
+                    <span class="icon">+</span> {{json_data}}
+                </button>
+                <button type="button" class="btn-pill" title="Insert Panel Name variable" onclick="insert_{textarea_id}('{{panel_name}}')">
+                    <span class="icon">+</span> {{panel_name}}
+                </button>
+            </div>
             """
 
-        # 2. Build Full Toolbar
-        toolbar_html = f"""
-        <div class="prompt-toolbar" style="margin-bottom: 5px; padding: 5px; background: #e9e9e9; border: 1px solid #ccc; border-bottom: none;">
-            {insert_html}
-            <strong style="color: #333;">Actions:</strong>
-            <button type="button" class="button" style="background: #ba2121; color: white;" onclick="restore_{textarea_id}()"> ↺ Restore from Master</button>
+        # 2. Build the Full Widget HTML with CSS Styles
+        # We inject CSS directly here so it's self-contained and doesn't require external CSS files.
+        html = f"""
+        <style>
+            /* Scoped styles for the prompt widget */
+            .prompt-wrapper {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                margin-bottom: 2px;
+            }}
+            .prompt-toolbar {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background-color: #f8f9fa; /* Light grey background */
+                border: 1px solid #ccc;
+                border-bottom: none; /* Connects to the textarea below */
+                border-radius: 6px 6px 0 0;
+                padding: 10px 15px;
+            }}
+            .toolbar-section {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }}
+            .toolbar-label {{
+                font-size: 11px;
+                font-weight: 700;
+                color: #6c757d;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-right: 4px;
+            }}
+            
+            /* "Chip" Style Insert Buttons */
+            .btn-pill {{
+                background-color: #ffffff;
+                border: 1px solid #d1d9e6;
+                color: #2c3e50;
+                border-radius: 20px; /* Fully rounded */
+                padding: 4px 12px;
+                font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+                font-size: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }}
+            .btn-pill:hover {{
+                border-color: #3498db;
+                color: #3498db;
+                background-color: #f0f7ff;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }}
+            .btn-pill .icon {{
+                font-weight: bold;
+                color: #3498db;
+            }}
+
+            /* Action Buttons */
+            .btn-action {{
+                padding: 6px 14px;
+                border-radius: 4px;
+                border: none;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            }}
+            .btn-update {{
+                background-color: #2ea44f; /* GitHub Green */
+                color: white;
+            }}
+            .btn-update:hover {{ background-color: #2c974b; }}
+            
+            .btn-restore {{
+                background-color: #cb2431; /* GitHub Red */
+                color: white;
+            }}
+            .btn-restore:hover {{ background-color: #b31d28; }}
+
+            /* Textarea tweaks */
+            textarea.vLargeTextField {{
+                border-top-left-radius: 0 !important;
+                border-top-right-radius: 0 !important;
+                border-color: #ccc !important;
+            }}
+        </style>
+
+        <div class="prompt-wrapper">
+            <div class="prompt-toolbar">
+                {insert_html}
+
+                <div class="toolbar-section">
+                    <span class="toolbar-label">Master Controls:</span>
+                    
+                    <button type="button" class="btn-action btn-update" onclick="update_master_{textarea_id}()">
+                        ⬆ Update Master
+                    </button>
+
+                    <button type="button" class="btn-action btn-restore" onclick="restore_{textarea_id}()">
+                        ↺ Restore
+                    </button>
+                </div>
+            </div>
+            
+            {textarea_html}
         </div>
 
         <script>
@@ -3096,106 +3305,249 @@ class PromptInjectionWidget(forms.Textarea):
             var sourceBox = document.getElementById('{backup_id}');
             var targetBox = document.getElementById('{textarea_id}');
             if (!sourceBox || !sourceBox.value) {{
-                alert("Master Template is empty or missing.");
+                alert("❌ Master Template is empty. Nothing to restore.");
                 return;
             }}
-            if (confirm("Replace text with Master Template content?")) {{
+            if (confirm("⚠️ RESTORE CONFIRMATION\\n\\nAre you sure you want to replace your current edits with the Master Template?")) {{
                 targetBox.value = sourceBox.value;
+            }}
+        }}
+
+        function update_master_{textarea_id}() {{
+            var currentBox = document.getElementById('{textarea_id}');
+            var masterBox = document.getElementById('{backup_id}');
+            if (!currentBox.value) {{
+                alert("❌ Current text is empty. Cannot update Master.");
+                return;
+            }}
+            if (confirm("⚠️ UPDATE MASTER TEMPLATE?\\n\\nThis will copy your current text into the Master Backup field.\\n\\n(You must still click 'SAVE' at the bottom of the page!)")) {{
+                masterBox.value = currentBox.value;
+                alert("✅ Master Template updated in memory.\\n\\nPLEASE REMEMBER TO CLICK 'SAVE' BELOW!");
             }}
         }}
         </script>
         """
-        return mark_safe(toolbar_html + html)
+        return mark_safe(html)
+
+# ==============================================================================
+# 2. CUSTOM FORM: Connects the Widget to the Model Fields
+# ==============================================================================
 
 
-# --- 2. UPDATED FORM ---
 class AIAgentConfigForm(forms.ModelForm):
     class Meta:
         model = AIAgentConfigProxy
         fields = '__all__'
+
         widgets = {
-            # System Prompt: show_inserts=False (No variables)
+            # --- SYSTEM PROMPT CONFIGURATION ---
             'system_prompt': PromptInjectionWidget(
+                # Tells widget which hidden field to look for
                 backup_field_name='saved_system_prompt_backup',
+                # System prompt usually doesn't need variable inserts
                 show_inserts=False,
-                attrs={'rows': 15, 'style': 'width: 100%; font-family: monospace;'}
+                attrs={
+                    'rows': 20, 'style': 'width: 100%; font-family: monospace; font-size: 13px;'}
             ),
 
-            # User Prompt: show_inserts=True (Has variables)
+            # --- USER PROMPT CONFIGURATION ---
             'user_prompt_template': PromptInjectionWidget(
+                # Tells widget which hidden field to look for
                 backup_field_name='saved_template_backup',
+                # Shows the [+ {json_data}] buttons
                 show_inserts=True,
-                attrs={'rows': 15, 'style': 'width: 100%; font-family: monospace;'}
+                attrs={
+                    'rows': 20, 'style': 'width: 100%; font-family: monospace; font-size: 13px;'}
             ),
 
-            # Hidden Backups
+            # --- HIDE THE BACKUP FIELDS ---
+            # We hide these so the user doesn't have to see two giant text boxes.
+            # The Widget's JS interacts with these hidden fields.
             'saved_system_prompt_backup': forms.HiddenInput(),
             'saved_template_backup': forms.HiddenInput(),
         }
 
+# class PromptInjectionWidget(forms.Textarea):
+#     """
+#     Adds a toolbar.
+#     - show_inserts=True: Shows [+ {json_data}] buttons (For User Prompt)
+#     - show_inserts=False: Shows only Restore button (For System Prompt)
+#     """
+
+#     def __init__(self, backup_field_name, show_inserts=True, attrs=None):
+#         self.backup_field_name = backup_field_name
+#         self.show_inserts = show_inserts
+#         super().__init__(attrs)
+
+#     def render(self, name, value, attrs=None, renderer=None):
+#         html = super().render(name, value, attrs, renderer)
+
+#         textarea_id = attrs.get('id', f'id_{name}')
+#         backup_id = f"id_{self.backup_field_name}"
+
+#         # 1. Build Insert Buttons HTML (Only if show_inserts is True)
+#         insert_html = ""
+#         if self.show_inserts:
+#             insert_html = f"""
+#             <strong style="color: #333;">Insert:</strong>
+#             <button type="button" class="button" onclick="insert_{textarea_id}('{{json_data}}')"> + {{json_data}}</button>
+#             <button type="button" class="button" onclick="insert_{textarea_id}('{{panel_name}}')"> + {{panel_name}}</button>
+#             &nbsp;|&nbsp;
+#             """
+
+#         # 2. Build Full Toolbar
+#         toolbar_html = f"""
+#         <div class="prompt-toolbar" style="margin-bottom: 5px; padding: 5px; background: #e9e9e9; border: 1px solid #ccc; border-bottom: none;">
+#             {insert_html}
+#             <strong style="color: #333;">Actions:</strong>
+#             <button type="button" class="button" style="background: #ba2121; color: white;" onclick="restore_{textarea_id}()"> ↺ Restore from Master</button>
+#         </div>
+
+#         <script>
+#         function insert_{textarea_id}(text) {{
+#             var txtarea = document.getElementById('{textarea_id}');
+#             if (!txtarea) return;
+#             var start = txtarea.selectionStart;
+#             var end = txtarea.selectionEnd;
+#             var val = txtarea.value;
+#             txtarea.value = val.substring(0, start) + text + val.substring(end);
+#             txtarea.selectionStart = txtarea.selectionEnd = start + text.length;
+#             txtarea.focus();
+#         }}
+
+#         function restore_{textarea_id}() {{
+#             var sourceBox = document.getElementById('{backup_id}');
+#             var targetBox = document.getElementById('{textarea_id}');
+#             if (!sourceBox || !sourceBox.value) {{
+#                 alert("Master Template is empty or missing.");
+#                 return;
+#             }}
+#             if (confirm("Replace text with Master Template content?")) {{
+#                 targetBox.value = sourceBox.value;
+#             }}
+#         }}
+#         </script>
+#         """
+#         return mark_safe(toolbar_html + html)
+
+
+# # --- 2. UPDATED FORM ---
+# class AIAgentConfigForm(forms.ModelForm):
+#     class Meta:
+#         model = AIAgentConfigProxy
+#         fields = '__all__'
+#         widgets = {
+#             # System Prompt: show_inserts=False (No variables)
+#             'system_prompt': PromptInjectionWidget(
+#                 backup_field_name='saved_system_prompt_backup',
+#                 show_inserts=False,
+#                 attrs={'rows': 15, 'style': 'width: 100%; font-family: monospace;'}
+#             ),
+
+#             # User Prompt: show_inserts=True (Has variables)
+#             'user_prompt_template': PromptInjectionWidget(
+#                 backup_field_name='saved_template_backup',
+#                 show_inserts=True,
+#                 attrs={'rows': 15, 'style': 'width: 100%; font-family: monospace;'}
+#             ),
+
+#             # Hidden Backups
+#             'saved_system_prompt_backup': forms.HiddenInput(),
+#             'saved_template_backup': forms.HiddenInput(),
+#         }
+
 
 @admin.register(AIAgentConfigProxy)
 class AIAgentConfigAdmin(admin.ModelAdmin):
-    # Connect the custom form we made above
+    # 1. Connect the Custom Form
     form = AIAgentConfigForm
 
+    # 2. List View Settings
     list_display = (
         'panel_name',
         'model_id',
         'is_active',
         'system_prompt',
         'user_prompt_template',
-        'updated_at'
+        'updated_at',
+        'history_display'
     )
     list_filter = ('is_active', 'model_id')
     search_fields = ('panel_name', 'system_prompt')
 
-    # This logic locks the fields when you are Editing (obj exists),
-    # but keeps them unlocked when you are Creating (obj is None).
-
+    # 3. Read-Only Fields Logic
     def get_readonly_fields(self, request, obj=None):
-        if obj:  # If we are editing an existing row
-            return ('panel_name', 'updated_at')
-        # If we are creating a new row, only updated_at is locked (auto-date)
-        return ('updated_at',)
+        if obj:
+            # When editing, lock panel_name and show history
+            return ('panel_name', 'updated_at', 'history_display')
+        return ('updated_at', 'history_display')
 
+    # 4. Fieldsets Layout
     fieldsets = (
         ('Configuration', {
             'fields': ('panel_name', 'is_active', 'model_id'),
         }),
         ('System Prompt (Persona)', {
-            'description': 'Define the AI role here. Use the buttons to Restore from Master.',
+            'description': 'Define the AI role here. Use "Update Master" to save current text as the new default.',
             'fields': (
-                'system_prompt',               # <--- Has Toolbar
-                'saved_system_prompt_backup'   # <--- The Backup Storage
+                'system_prompt',
+                'saved_system_prompt_backup'
             ),
         }),
         ('User Prompt (Task)', {
             'description': 'Define the specific task. Must include {json_data}.',
             'fields': (
-                'user_prompt_template',        # <--- Has Toolbar
-                'saved_template_backup'        # <--- The Backup Storage
+                'user_prompt_template',
+                'saved_template_backup'
             ),
         }),
-        ('Metadata', {
-            'fields': ('updated_at',)
+        ('History & Metadata', {
+            'fields': ('history_display', 'updated_at'),
+            'classes': ('collapse',),
         }),
     )
 
-    # fieldsets = (
-    #     ('Configuration', {
-    #         'fields': ('panel_name', 'is_active', 'model_id'),
-    #     }),
-    #     ('Prompts', {
-    #         'fields': ('system_prompt', 'user_prompt_template'),
-    #         'description': 'Ensure {json_data} is present in the User Prompt Template.'
-    #     }),
-    #     ('Metadata', {
-    #         'fields': ('updated_at',)
-    #     }),
-    # )
+    # 5. THE HISTORY DISPLAY METHOD GOES HERE
+    def history_display(self, obj):
+        if not obj.prompt_history or not isinstance(obj.prompt_history, dict):
+            return "No history recorded yet."
 
+        def build_table(title, data_list):
+            if not data_list:
+                return f"<div style='margin-bottom:15px; color:#666;'><strong>{title}</strong>: No changes recorded.</div>"
+
+            html = f"<div style='margin-bottom: 25px; border: 1px solid #ccc; background: #fff;'>"
+            html += f"<div style='padding: 8px; background: #eee; font-weight:bold; border-bottom: 1px solid #ccc;'>{title}</div>"
+            html += '<table style="width:100%; border-collapse: collapse;">'
+
+            for entry in data_list:
+                ts = entry.get('timestamp', '-')
+                # Support both old "snippet" and new "full_text" keys
+                text_content = entry.get('full_text', entry.get('snippet', ''))
+
+                html += f'<tr>'
+                html += f'<td style="padding:8px; border-bottom:1px solid #eee; width: 140px; vertical-align: top; font-size: 11px; color: #555;">{ts}</td>'
+
+                # SCROLLABLE BOX FOR CONTENT
+                html += f'<td style="padding:8px; border-bottom:1px solid #eee;">'
+                html += f'<div style="max-height: 150px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 11px; background: #f8f8f8; padding: 5px; border: 1px solid #ddd;">{text_content}</div>'
+                html += f'</td></tr>'
+
+            html += '</table></div>'
+            return html
+
+        system_history = obj.prompt_history.get('system', [])
+        user_history = obj.prompt_history.get('user', [])
+
+        html_out = build_table("System Prompt History", system_history)
+        html_out += build_table("User Prompt History", user_history)
+
+        return mark_safe(html_out)
+
+    # 6. Add a Label for the UI
+    history_display.short_description = "Change Logs"
+
+    # 7. Media Property (Optional, usually for CSS/JS)
     @property
     def media(self):
-        # Keeps your existing styling if you have any
         return forms.Media()

@@ -1,6 +1,6 @@
 from django.db import models
 import uuid
-
+from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 
@@ -1030,7 +1030,14 @@ class AIAgentConfig(models.Model):
         db_column='is_active',
         verbose_name="Is Active"
     )
+# --- UPDATED: HISTORY TRACKING (Dict) ---
+    prompt_history = models.JSONField(
 
+        default=dict,
+        blank=True,
+        db_column='prompt_history',
+        verbose_name="Prompt Change History"
+    )
     system_prompt = models.TextField(
         db_column='system_prompt',
         verbose_name="System Prompt (Persona)"
@@ -1092,6 +1099,41 @@ class AIAgentConfig(models.Model):
 
     def __str__(self):
         return self.panel_name
+
+    def save(self, *args, **kwargs):
+        # HISTORY LOGIC
+        if self.pk:
+            try:
+                old_obj = AIAgentConfig.objects.get(pk=self.pk)
+
+                # 1. Initialize structure
+                if not self.prompt_history or not isinstance(self.prompt_history, dict):
+                    self.prompt_history = {'system': [], 'user': []}
+
+                # Helper function to add history
+                def add_history_entry(key, old_text):
+                    entry = {
+                        "timestamp": timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        # --- CHANGE HERE: REMOVED [:100] SLICING ---
+                        "full_text": old_text if old_text else "(Empty)"
+                    }
+
+                    current_list = self.prompt_history.get(key, [])
+                    current_list.insert(0, entry)
+                    self.prompt_history[key] = current_list[:5]
+
+                # 2. Check System Prompt Changes
+                if old_obj.system_prompt != self.system_prompt:
+                    add_history_entry('system', old_obj.system_prompt)
+
+                # 3. Check User Prompt Changes
+                if old_obj.user_prompt_template != self.user_prompt_template:
+                    add_history_entry('user', old_obj.user_prompt_template)
+
+            except AIAgentConfig.DoesNotExist:
+                pass
+
+        super().save(*args, **kwargs)
 
 
 class AIAgentLog(models.Model):
@@ -1157,9 +1199,6 @@ class AIAgentLog(models.Model):
     def __str__(self):
         return f"{self.panel_name} - {self.created_at}"
 
-
-# --- PROXY MODELS (For Admin Organization) ---
-# Add these at the bottom with your other proxies
 
 class AIAgentConfigProxy(AIAgentConfig):
     class Meta:
