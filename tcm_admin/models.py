@@ -91,8 +91,7 @@ class Analysis(models.Model):
                                     verbose_name="Functional Panel 2", blank=True, null=True)
     func_panel_3 = models.CharField(max_length=255, db_column='Functional Panel 3',
                                     verbose_name="Functional Panel 3", blank=True, null=True)
-    definition = models.TextField(
-        db_column='Definition', verbose_name="Marker Definition (What Is It)", blank=True, null=True)
+    definition = models.TextField(db_column='Definition', verbose_name='Marker Definition (What Is It)', blank=True, null=True)
 
     class Meta:
         managed = True  # <--- CHANGED: Allows you to add/edit rows
@@ -269,12 +268,7 @@ class WBCGlossary(models.Model):
         # blank=True,
         # null=True
     )
-    definition = models.TextField(
-        db_column='Definition',
-        verbose_name="Definition",
-        blank=True,
-        null=True
-    )
+    definition = models.TextField(db_column='Definition', verbose_name='Marker Definition (What Is It)', blank=True, null=True)
     next_steps = models.TextField(
         db_column='Next Steps',
         verbose_name="Next Steps",
@@ -939,31 +933,33 @@ class FunctionalPanel(models.Model):
 
 
 class FlowChartMapping(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    pattern_category = models.CharField(
-        max_length=255, db_column='Pattern Category', verbose_name="Pattern Category")
-    level = models.CharField(
-        max_length=100, db_column='Level', verbose_name="Level", blank=True, null=True)
-    related_pattern_1 = models.CharField(
-        max_length=255, db_column='Related Pattern 1', verbose_name="Related Pattern 1", blank=True, null=True)
-    relationship_type_1 = models.CharField(
-        max_length=255, db_column='Relationship Type 1', verbose_name="Relationship Type 1", blank=True, null=True)
-    relationship_description_1 = models.TextField(
-        db_column='Relationship Description 1', verbose_name="Relationship Description 1", blank=True, null=True)
-    related_pattern_2 = models.CharField(
-        max_length=255, db_column='Related Pattern 2', verbose_name="Related Pattern 2", blank=True, null=True)
-    relationship_type_2 = models.CharField(
-        max_length=255, db_column='Relationship Type 2', verbose_name="Relationship Type 2", blank=True, null=True)
-    relationship_description_2 = models.TextField(
-        db_column='Relationship Description 2', verbose_name="Relationship Description 2", blank=True, null=True)
-    related_pattern_3 = models.CharField(
-        max_length=255, db_column='Related Pattern 3', verbose_name="Related Pattern 3", blank=True, null=True)
-    relationship_type_3 = models.CharField(
-        max_length=255, db_column='Relationship Type 3', verbose_name="Relationship Type 3", blank=True, null=True)
-    relationship_description_3 = models.TextField(
-        db_column='Relationship Description 3', verbose_name="Relationship Description 3", blank=True, null=True)
-    notes = models.TextField(
-        db_column='Notes / Clinical Reasoning', verbose_name="Notes / Clinical Reasoning", blank=True, null=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pattern_id = models.CharField(
+        max_length=50, db_column='pattern_id', verbose_name="Pattern ID", blank=True, null=True)
+    pattern_imbalance = models.CharField(
+        max_length=255, db_column='pattern_imbalance', verbose_name="Pattern Imbalance (Source)")
+    type = models.CharField(
+        max_length=100, db_column='type', verbose_name="Type", blank=True, null=True)
+    modern_description = models.CharField(
+        max_length=255, db_column='modern_description', verbose_name="Modern Description (Source)", blank=True, null=True)
+    connects_to = models.CharField(
+        max_length=255, db_column='connects_to', verbose_name="Connects To (Target Pattern)")
+    connects_to_modern_description = models.CharField(
+        max_length=255, db_column='connects_to_modern_description', verbose_name="Connects To Modern Description", blank=True, null=True)
+    relationship = models.CharField(
+        max_length=100, db_column='relationship', verbose_name="Relationship (Cause / Feedback)", blank=True, null=True)
+    arrow_style = models.CharField(
+        max_length=50, db_column='arrow_style', verbose_name="Arrow Style (Solid / Double)", blank=True, null=True)
+    link_priority = models.CharField(
+        max_length=50, db_column='link_priority', verbose_name="Link Priority (Primary / Secondary)", blank=True, null=True)
+    tcm_note = models.TextField(
+        db_column='tcm_note', verbose_name="TCM Note", blank=True, null=True)
+    functional_note = models.TextField(
+        db_column='functional_note', verbose_name="Functional Note", blank=True, null=True)
+    visual_tcm_note = models.TextField(
+        db_column='visual_tcm_note', verbose_name="Visual TCM Note", blank=True, null=True)
+    visual_functional_note = models.TextField(
+        db_column='visual_functional_note', verbose_name="Visual Functional Note", blank=True, null=True)
 
     class Meta:
         managed = False
@@ -972,28 +968,57 @@ class FlowChartMapping(models.Model):
         verbose_name_plural = "Flow Chart Connection Mappings"
 
     def __str__(self):
-        return self.pattern_category
+        return f"{self.pattern_imbalance} -> {self.connects_to}"
 
 
 class SupportLibraryMapping(models.Model):
     id = models.BigAutoField(primary_key=True)
-    pattern_name = models.CharField(
-        max_length=255, db_column='pattern_name', verbose_name="Pattern / Body Type Name")
+    row_order = models.IntegerField(
+        db_column='row_order', verbose_name="Row Order", blank=True, null=True)
+    updated_tcm_pattern_name = models.CharField(
+        max_length=255, db_column='updated_tcm_pattern_name', verbose_name="TCM Pattern Name")
+    updated_modern_description = models.CharField(
+        max_length=255, db_column='updated_modern_description', verbose_name="Modern Description", blank=True, null=True)
     category = models.CharField(
-        max_length=255, db_column='category', verbose_name="Support Category")
-    recommendation = models.TextField(
-        db_column='recommendation', verbose_name="Recommendation Copy")
-    sort_order = models.IntegerField(
-        db_column='sort_order', verbose_name="Sort Order", default=1)
+        max_length=255, db_column='category', verbose_name="Category")
+    option_name = models.CharField(
+        max_length=255, db_column='option_name', verbose_name="Option Name")
+    botanical_scientific_name = models.CharField(
+        max_length=255, db_column='botanical_scientific_name', verbose_name="Botanical / Scientific Name", blank=True, null=True)
+    descriptor = models.CharField(
+        max_length=255, db_column='descriptor', verbose_name="Descriptor", blank=True, null=True)
+    why_this_option_appears = models.TextField(
+        db_column='why_this_option_appears', verbose_name="Why This Option Appears", blank=True, null=True)
+    support_action_primary = models.CharField(
+        max_length=255, db_column='support_action_primary', verbose_name="Support Action (Primary)", blank=True, null=True)
+    support_action_secondary = models.CharField(
+        max_length=255, db_column='support_action_secondary', verbose_name="Support Action (Secondary)", blank=True, null=True)
+    support_action_others = models.CharField(
+        max_length=255, db_column='support_action_others', verbose_name="Support Action (Others)", blank=True, null=True)
+    functional_biochemical_pathways = models.TextField(
+        db_column='functional_biochemical_pathways', verbose_name="Functional / Biochemical Pathways", blank=True, null=True)
+    how_actions_work = models.TextField(
+        db_column='how_actions_work', verbose_name="How Actions Work", blank=True, null=True)
+    contraindications_interactions = models.TextField(
+        db_column='contraindications_interactions', verbose_name="Contraindications & Interactions", blank=True, null=True)
+    functional_pattern_cautions = models.TextField(
+        db_column='functional_pattern_cautions', verbose_name="Functional / Pattern Cautions", blank=True, null=True)
+    internal_patterns_imbalances = models.TextField(
+        db_column='internal_patterns_imbalances', verbose_name="Internal: Patterns & Imbalances", blank=True, null=True)
+    internal_symptoms_manifestations = models.TextField(
+        db_column='internal_symptoms_manifestations', verbose_name="Internal: Symptoms & Manifestations", blank=True, null=True)
+    internal_contraindications_interactions = models.TextField(
+        db_column='internal_contraindications_interactions', verbose_name="Internal: Contraindications & Interactions", blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'support_library_mapping'
         verbose_name = "Support Library Mapping"
         verbose_name_plural = "Support Library Mappings"
+        ordering = ['row_order', 'id']
 
     def __str__(self):
-        return f"{self.pattern_name} ({self.category})"
+        return f"{self.updated_tcm_pattern_name} — {self.option_name} ({self.category})"
 
 
 class FunctionalPanelProxy(FunctionalPanel):

@@ -1411,7 +1411,7 @@ class AnalysisAdmin(RemindUpdateMixin, admin.ModelAdmin):
 
         ('Blood Marker Identification', {
             # Moved 'severity' here
-            'fields': ('panel', 'blood_test', 'blood_test_full', 'blood_test_acronym', 'vital_marker', 'severity')
+            'fields': ('panel', 'blood_test', 'blood_test_full', 'blood_test_acronym', 'definition', 'vital_marker', 'severity')
         }),
         ('Units & Ranges', {  # Renamed from "Ranges & Severity"
             # Moved 'units' and 'units_interchangeable' here
@@ -2881,7 +2881,7 @@ class WBCMatrixAdmin(RemindUpdateMixin, admin.ModelAdmin):
 
     def risk_definition_click(self, obj):
         return self._create_click_to_open(obj.risk_definition, width="200px")
-    risk_definition_click.short_description = "Risk Definition"
+    risk_definition_click.short_description = "Marker Definition (What Is It)"
 
     # --- UPDATED CSS FOR COMPACT UI ---
     class Media:
@@ -3583,35 +3583,58 @@ class FunctionalPanelAdmin(admin.ModelAdmin):
 @admin.register(FlowChartMappingProxy)
 class FlowChartMappingAdmin(admin.ModelAdmin):
     list_display = (
-        'pattern_category',
-        'level',
-        'related_pattern_1',
-        'relationship_type_1',
-        'related_pattern_2',
-        'relationship_type_2',
-        'related_pattern_3',
-        'relationship_type_3',
+        'pattern_id',
+        'pattern_imbalance',
+        'modern_description',
+        'connects_to',
+        'connects_to_modern_description',
+        'relationship',
+        'arrow_style',
+        'link_priority',
+        'visual_functional_note',
+        'visual_tcm_note',
     )
-    list_filter = ('level',)
+    list_filter = ('type', 'relationship', 'arrow_style', 'link_priority')
     search_fields = (
-        'pattern_category',
-        'related_pattern_1',
-        'relationship_description_1',
-        'related_pattern_2',
-        'relationship_description_2',
-        'related_pattern_3',
-        'relationship_description_3',
-        'notes',
+        'pattern_id',
+        'pattern_imbalance',
+        'modern_description',
+        'connects_to',
+        'connects_to_modern_description',
+        'tcm_note',
+        'functional_note',
+        'visual_tcm_note',
+        'visual_functional_note',
     )
-    list_display_links = ('pattern_category',)
+    list_display_links = ('pattern_imbalance', 'connects_to')
     list_per_page = 50
 
 
 @admin.register(SupportLibraryMappingProxy)
 class SupportLibraryMappingAdmin(admin.ModelAdmin):
-    list_display = ('pattern_name', 'category', 'sort_order', 'recommendation')
-    list_filter = ('category', 'pattern_name')
-    search_fields = ('pattern_name', 'category', 'recommendation')
-    list_display_links = ('pattern_name',)
-    ordering = ('pattern_name', 'category', 'sort_order')
+    list_display = (
+        'row_order',
+        'updated_tcm_pattern_name',
+        'updated_modern_description',
+        'category',
+        'option_name',
+        'botanical_scientific_name',
+        'descriptor',
+        'support_action_primary',
+        'support_action_secondary',
+    )
+    list_filter = ('category', 'updated_tcm_pattern_name')
+    search_fields = (
+        'updated_tcm_pattern_name',
+        'updated_modern_description',
+        'category',
+        'option_name',
+        'botanical_scientific_name',
+        'descriptor',
+        'why_this_option_appears',
+        'how_actions_work',
+        'contraindications_interactions',
+    )
+    list_display_links = ('updated_tcm_pattern_name', 'option_name')
+    ordering = ('row_order', 'id')
     list_per_page = 50
