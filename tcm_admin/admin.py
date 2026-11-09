@@ -26,7 +26,9 @@ from .models import (
     MedicalCondition, WBCGlossary, WBCMatrix, MedicationList,
     MedicationMapping, MedicationScoreDef, SupplementList,
     SupplementMapping, SupplementScoreDef, LifestyleQuestionnaire,
-    TCMBodyTypeMapping, TCMPathogenDefinition
+    TCMBodyTypeMapping, TCMPathogenDefinition,
+    FunctionalPanel, FlowChartMapping, SupportLibraryMapping,
+    FunctionalPanelProxy, FlowChartMappingProxy, SupportLibraryMappingProxy,
 )
 from .models import AIAgentConfigProxy, AIAgentLogProxy
 
@@ -1387,10 +1389,11 @@ class AnalysisAdmin(RemindUpdateMixin, admin.ModelAdmin):
 # --- DYNAMIC MAPPING CONFIGURATION ---
     # --- ADDED SEARCH FIELDS ---
     search_fields = ('blood_test', 'blood_test_full',
-                     'blood_test_acronym', 'panel', 'units', 'units_interchangeable', 'severity', 'vital_marker')
+                     'blood_test_acronym', 'definition', 'panel', 'units', 'units_interchangeable', 'severity', 'vital_marker')
     # --- LIST DISPLAY UPDATED WITH CLICK WRAPPERS ---
     list_display = (
         'panel', 'blood_test', 'blood_test_full', 'blood_test_acronym',
+        'definition_click',
         'units', 'units_interchangeable', 'ideal_low', 'ideal_high',
         'absence_low', 'absence_high', 'severity', 'vital_marker',
 
@@ -1478,6 +1481,10 @@ class AnalysisAdmin(RemindUpdateMixin, admin.ModelAdmin):
         return forms.Media(**SHARED_MEDIA)
 
     # --- WRAPPER METHODS ---
+
+    def definition_click(self, obj):
+        return self._create_click_to_open(obj.definition)
+    definition_click.short_description = "Marker Definition (What Is It)"
 
     def func_diag_low_click(self, obj):
         return self._create_click_to_open(obj.func_diag_low)
@@ -1653,12 +1660,15 @@ class PatternAdmin(RemindUpdateMixin, admin.ModelAdmin):
     ]
 
     search_fields = ('tcm_patterns', 'modern_description',
+                     'customer_friendly_explanation', 'support_plan_priority',
                      'middle_primary', 'pathogenic_factor', 'symptoms')
 
     list_display = (
         'tcm_patterns',
         'excess_deficiency',
         'modern_description_click',
+        'customer_friendly_explanation_click',
+        'support_plan_priority_click',
         'middle_primary',
         'middle_secondary',
         'middle_tertiary',
@@ -1716,6 +1726,14 @@ class PatternAdmin(RemindUpdateMixin, admin.ModelAdmin):
     def modern_description_click(self, obj):
         return self._create_click_to_open(obj.modern_description)
     modern_description_click.short_description = "Modern Description"
+
+    def customer_friendly_explanation_click(self, obj):
+        return self._create_click_to_open(obj.customer_friendly_explanation)
+    customer_friendly_explanation_click.short_description = "Customer-Friendly Explanation"
+
+    def support_plan_priority_click(self, obj):
+        return self._create_click_to_open(obj.support_plan_priority)
+    support_plan_priority_click.short_description = "Support Plan Priority"
 
     def symptoms_click(self, obj):
         return self._create_click_to_open(obj.symptoms)
@@ -3551,3 +3569,49 @@ class AIAgentConfigAdmin(admin.ModelAdmin):
     @property
     def media(self):
         return forms.Media()
+
+
+
+@admin.register(FunctionalPanelProxy)
+class FunctionalPanelAdmin(admin.ModelAdmin):
+    list_display = ('functional_panel', 'subtext')
+    search_fields = ('functional_panel', 'subtext')
+    list_display_links = ('functional_panel',)
+    list_per_page = 50
+
+
+@admin.register(FlowChartMappingProxy)
+class FlowChartMappingAdmin(admin.ModelAdmin):
+    list_display = (
+        'pattern_category',
+        'level',
+        'related_pattern_1',
+        'relationship_type_1',
+        'related_pattern_2',
+        'relationship_type_2',
+        'related_pattern_3',
+        'relationship_type_3',
+    )
+    list_filter = ('level',)
+    search_fields = (
+        'pattern_category',
+        'related_pattern_1',
+        'relationship_description_1',
+        'related_pattern_2',
+        'relationship_description_2',
+        'related_pattern_3',
+        'relationship_description_3',
+        'notes',
+    )
+    list_display_links = ('pattern_category',)
+    list_per_page = 50
+
+
+@admin.register(SupportLibraryMappingProxy)
+class SupportLibraryMappingAdmin(admin.ModelAdmin):
+    list_display = ('pattern_name', 'category', 'sort_order', 'recommendation')
+    list_filter = ('category', 'pattern_name')
+    search_fields = ('pattern_name', 'category', 'recommendation')
+    list_display_links = ('pattern_name',)
+    ordering = ('pattern_name', 'category', 'sort_order')
+    list_per_page = 50

@@ -91,6 +91,8 @@ class Analysis(models.Model):
                                     verbose_name="Functional Panel 2", blank=True, null=True)
     func_panel_3 = models.CharField(max_length=255, db_column='Functional Panel 3',
                                     verbose_name="Functional Panel 3", blank=True, null=True)
+    definition = models.TextField(
+        db_column='Definition', verbose_name="Marker Definition (What Is It)", blank=True, null=True)
 
     class Meta:
         managed = True  # <--- CHANGED: Allows you to add/edit rows
@@ -116,6 +118,10 @@ class Pattern(models.Model):
     # 3. Modern Description
     modern_description = models.TextField(
         db_column='Modern Description', verbose_name="Modern Description", blank=True, null=True)
+    customer_friendly_explanation = models.TextField(
+        db_column='Customer-Friendly Explanation', verbose_name="Customer-Friendly Explanation", blank=True, null=True)
+    support_plan_priority = models.TextField(
+        db_column='Support Plan Priority', verbose_name="Support Plan Priority", blank=True, null=True)
 
     # 4-7. Middle Level Categories
     middle_primary = models.CharField(max_length=255, db_column='Middle Level - Primary Category',
@@ -913,6 +919,105 @@ class FunctionalCategoryProxy(FunctionalCategory):
         app_label = 'ui_core'
         verbose_name = "Functional Medicine Indication"
         verbose_name_plural = "\u200b\u200b\u200b\u200b\u200bFunctional Medicine Indications"  # 5 Spaces
+
+
+class FunctionalPanel(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    functional_panel = models.CharField(
+        max_length=255, db_column='Functional Panel', verbose_name="Functional Panel")
+    subtext = models.TextField(
+        db_column='Subtext', verbose_name="Subtext (System Definition)", blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'functional_panels'
+        verbose_name = "Functional Panel Definition"
+        verbose_name_plural = "Functional Panel Definitions"
+
+    def __str__(self):
+        return self.functional_panel
+
+
+class FlowChartMapping(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    pattern_category = models.CharField(
+        max_length=255, db_column='Pattern Category', verbose_name="Pattern Category")
+    level = models.CharField(
+        max_length=100, db_column='Level', verbose_name="Level", blank=True, null=True)
+    related_pattern_1 = models.CharField(
+        max_length=255, db_column='Related Pattern 1', verbose_name="Related Pattern 1", blank=True, null=True)
+    relationship_type_1 = models.CharField(
+        max_length=255, db_column='Relationship Type 1', verbose_name="Relationship Type 1", blank=True, null=True)
+    relationship_description_1 = models.TextField(
+        db_column='Relationship Description 1', verbose_name="Relationship Description 1", blank=True, null=True)
+    related_pattern_2 = models.CharField(
+        max_length=255, db_column='Related Pattern 2', verbose_name="Related Pattern 2", blank=True, null=True)
+    relationship_type_2 = models.CharField(
+        max_length=255, db_column='Relationship Type 2', verbose_name="Relationship Type 2", blank=True, null=True)
+    relationship_description_2 = models.TextField(
+        db_column='Relationship Description 2', verbose_name="Relationship Description 2", blank=True, null=True)
+    related_pattern_3 = models.CharField(
+        max_length=255, db_column='Related Pattern 3', verbose_name="Related Pattern 3", blank=True, null=True)
+    relationship_type_3 = models.CharField(
+        max_length=255, db_column='Relationship Type 3', verbose_name="Relationship Type 3", blank=True, null=True)
+    relationship_description_3 = models.TextField(
+        db_column='Relationship Description 3', verbose_name="Relationship Description 3", blank=True, null=True)
+    notes = models.TextField(
+        db_column='Notes / Clinical Reasoning', verbose_name="Notes / Clinical Reasoning", blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'flow_chart_mapping'
+        verbose_name = "Flow Chart Connection Mapping"
+        verbose_name_plural = "Flow Chart Connection Mappings"
+
+    def __str__(self):
+        return self.pattern_category
+
+
+class SupportLibraryMapping(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    pattern_name = models.CharField(
+        max_length=255, db_column='pattern_name', verbose_name="Pattern / Body Type Name")
+    category = models.CharField(
+        max_length=255, db_column='category', verbose_name="Support Category")
+    recommendation = models.TextField(
+        db_column='recommendation', verbose_name="Recommendation Copy")
+    sort_order = models.IntegerField(
+        db_column='sort_order', verbose_name="Sort Order", default=1)
+
+    class Meta:
+        managed = False
+        db_table = 'support_library_mapping'
+        verbose_name = "Support Library Mapping"
+        verbose_name_plural = "Support Library Mappings"
+
+    def __str__(self):
+        return f"{self.pattern_name} ({self.category})"
+
+
+class FunctionalPanelProxy(FunctionalPanel):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "Functional Panel Subtext"
+        verbose_name_plural = "\u200b\u200b\u200b\u200b\u200b\u200bFunctional Panel Subtexts"
+
+
+class FlowChartMappingProxy(FlowChartMapping):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "Flow Chart Connection"
+        verbose_name_plural = "\u200b\u200b\u200b\u200b\u200b\u200b\u200bFlow Chart Connections"
+
+
+class SupportLibraryMappingProxy(SupportLibraryMapping):
+    class Meta:
+        proxy = True
+        app_label = 'ui_core'
+        verbose_name = "Support Plan Library Item"
+        verbose_name_plural = "\u200b\u200b\u200b\u200b\u200b\u200b\u200b\u200bSupport Plan Library"
 
 
 # --- GROUP 2: Medical Conditions & Symptoms ---
